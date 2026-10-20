@@ -1,0 +1,10 @@
+local/
+dist/
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+local.properties
+.claude/settings.local.json
+AGENTS.local.md
+CLAUDE.local.md

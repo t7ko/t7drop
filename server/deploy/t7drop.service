@@ -1,0 +1,47 @@
+# t7drop relay server: /etc/systemd/system/t7drop.service on the VPS (docs/deployment.md).
+
+[Unit]
+Description=t7drop relay server
+After=network.target
+
+[Service]
+Type=simple
+User=t7drop
+Group=t7drop
+ExecStart=/usr/bin/python3 -E -s /opt/t7drop/server/main.py /etc/t7drop/server.conf
+StateDirectory=t7drop
+StateDirectoryMode=0700
+UMask=0077
+Restart=always
+RestartSec=2
+
+# The key for the stored chunks lives only in memory: no core dumps (a limit of 1 makes
+# the kernel skip even piped dumps to apport), and the server marks itself non-dumpable.
+LimitCORE=1
+MemoryMax=200M
+
+# Only loopback: nginx connects from 127.0.0.1; the service itself connects nowhere.
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+IPAddressAllow=localhost
+IPAddressDeny=any
+
+NoNewPrivileges=yes
+CapabilityBoundingSet=
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+SystemCallArchitectures=native
+
+[Install]
+WantedBy=multi-user.target

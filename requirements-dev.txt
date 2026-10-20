@@ -1,0 +1,6 @@
+# For the tests on the laptop. The server needs only cryptography, which Ubuntu 24.04
+# provides (41.0.7, the version pinned here); the CLI needs PyNaCl and segno.
+cryptography==41.0.7
+PyNaCl
+segno
+pytest

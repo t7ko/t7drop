@@ -1,0 +1,105 @@
+{
+  "about": "t7drop protocol 1 test vectors: see docs/design.md, Encryption. pattern.bin is byte i = (i * 7 + 3) % 256.",
+  "key_hex": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+  "message_bytes": 1048576,
+  "items": [
+    {
+      "name": "text",
+      "id": "0b6f7a6e-2a43-4a59-9d6e-8f1c3a1d2e01",
+      "meta_file": "text.meta",
+      "data_file": "text.data",
+      "meta": {
+        "v": 1,
+        "kind": "text",
+        "mime": "text/plain; charset=utf-8",
+        "size": 45,
+        "from": "aaaaaaaaaaaa",
+        "to": "bbbbbbbbbbbb",
+        "created": 1800000000000
+      },
+      "plain_size": 45,
+      "plain_sha256": "0c92c2f288f5b2cdc29800441929074d7976b183f7db98e058d62fbd56a0fe05",
+      "plain_text": "Hello, t7drop! Привет 👋\nSecond line."
+    },
+    {
+      "name": "empty",
+      "id": "1c7a8b7f-3b54-4b6a-8e7f-9a2d4b2e3f02",
+      "meta_file": "empty.meta",
+      "data_file": "empty.data",
+      "meta": {
+        "v": 1,
+        "kind": "file",
+        "mime": "application/octet-stream",
+        "size": 0,
+        "from": "aaaaaaaaaaaa",
+        "to": "bbbbbbbbbbbb",
+        "created": 1800000000000,
+        "name": "empty.txt"
+      },
+      "plain_size": 0,
+      "plain_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "name": "two-messages",
+      "id": "2d8b9c80-4c65-4c7b-9f80-ab3e5c3f4a03",
+      "meta_file": "two-messages.meta",
+      "data_file": "two-messages.data",
+      "meta": {
+        "v": 1,
+        "kind": "file",
+        "mime": "application/octet-stream",
+        "size": 1048577,
+        "from": "aaaaaaaaaaaa",
+        "to": "bbbbbbbbbbbb",
+        "created": 1800000000000,
+        "name": "pattern.bin"
+      },
+      "plain_size": 1048577,
+      "plain_sha256": "75059752ce0b546127d584a3992627babb59950933c6d82d10ad46fec48e7c96"
+    }
+  ],
+  "must_fail": [
+    {
+      "item": "two-messages",
+      "file": "data",
+      "change": "truncate",
+      "length": 1048617,
+      "why": "the final message is missing"
+    },
+    {
+      "item": "two-messages",
+      "file": "data",
+      "change": "flip",
+      "offset": 1000,
+      "why": "altered"
+    },
+    {
+      "item": "two-messages",
+      "file": "data",
+      "change": "append",
+      "byte": 0,
+      "why": "data after FINAL"
+    },
+    {
+      "item": "text",
+      "file": "data",
+      "change": "item_id",
+      "id": "3e9cad91-5d76-4d8c-8091-bc4f6d4a5b04",
+      "why": "associated data of another item"
+    },
+    {
+      "item": "text",
+      "file": "meta",
+      "change": "item_id",
+      "id": "3e9cad91-5d76-4d8c-8091-bc4f6d4a5b04",
+      "why": "associated data of another item"
+    },
+    {
+      "item": "text",
+      "file": "meta",
+      "change": "swap",
+      "with": "data",
+      "why": "a content stream used as meta"
+    }
+  ]
+}

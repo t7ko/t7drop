@@ -1,0 +1,7 @@
+#!/bin/sh
+# t7drop-admin: the admin command of t7drop, /usr/local/sbin/t7drop-admin on the VPS.
+# Runs server/admin.py as the service's user, which owns the data folder; see
+# `t7drop-admin --help`.
+umask 077
+cd / && exec runuser -u t7drop -- /usr/bin/python3 -E -s /opt/t7drop/server/admin.py \
+    --config /etc/t7drop/server.conf "$@"
