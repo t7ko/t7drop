@@ -77,8 +77,9 @@ fun XiaomiCard() {
     InfoCard(
         "Xiaomi phone: check these once",
         listOf(
-            "App info → Autostart: on. Without it, transfers wait until you open t7drop.",
-            "App info → Battery saver: No restrictions. Without it, a large transfer may stop in the background.",
+            "App info → Battery saver: No restrictions. Without it, transfers may wait until you open t7drop, " +
+                "and a large one may stop in the background.",
+            "App info → Autostart: on, if your phone has this setting.",
         ),
     ) {
         TextButton(onClick = {

@@ -48,8 +48,15 @@ the push. Once pushed, assume it is public forever.**
   airplane mode with the app killed (delivered 17 s after the network returned), the
   app killed with kill -9 during an upload (resumed with the missing chunks only), an
   update during a download (finished, identical). The encryption tests pass on the
-  emulator with the app's libsodium. Not yet: the release key, the real server, the
-  phone, QR scanning with a camera.
+  emulator with the app's libsodium.
+- 2026-10-21: v0.1.0 published on GitHub (t7ko/t7drop); the user's phone (Redmi Note 12
+  Pro, HyperOS) installed it through Obtainium and paired by scanning the CLI's QR code
+  against the real server. On the phone: a photo shared from the gallery reached the
+  laptop intact; a text with a link, a text file and 20 MB reached the phone (Copy, Open
+  link, Open work); a text shared in airplane mode with the app swiped away went out by
+  itself about 2 minutes later, once the network was back, without opening the app. That
+  phone's HyperOS has no Autostart setting; Battery saver "No restrictions" was enough.
+  Skipped by the user's choice: a very large file over mobile data. M3 done with v0.1.1.
 
 ## Working with the VPS
 

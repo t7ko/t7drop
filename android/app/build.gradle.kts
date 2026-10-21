@@ -21,8 +21,8 @@ android {
         // 29: received files go to Downloads through MediaStore, hidden until complete.
         minSdk = 29
         targetSdk = 36
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = 2
+        versionName = "0.1.1"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         // libsodium comes as native code: the phone, and the x86_64 emulator.
         ndk { abiFilters += listOf("arm64-v8a", "x86_64") }
