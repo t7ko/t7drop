@@ -5,5 +5,6 @@ server/** text eol=lf
 *.ps1 text eol=crlf
 *.bat text eol=crlf
 *.jar binary
+*.dll binary
 testdata/vectors/*.meta binary
 testdata/vectors/*.data binary

@@ -110,9 +110,74 @@ the push. Once pushed, assume it is public forever.**
   `release.keyAlias`). Certificate SHA-256:
   `3da8fbdde68e4afaae3e738842743d7fc82534a3f59b6703f7e53f6cddcb79dc`. Every update must use
   this key, or the app has to be uninstalled and loses its data.
-- `windows/` (M4): the tray app.
+- `windows/` (M4): the tray app `T7Drop.exe`; see "Windows app" below. `windows/CLAUDE.md`
+  imports the t7helpers Windows notes (toolchain, trying tray apps).
 - `scripts/push.ps1` pushes to GitHub with the token (after `scan_private.py --history`);
-  `scripts/release.ps1` publishes release `v<versionName>` with the APK for Obtainium.
+  `scripts/release.ps1` publishes release `v<versionName>` with the APK for Obtainium and
+  `T7Drop.exe` for the Windows app's updater. `versionName` in `android/app/build.gradle.kts`
+  is the one version of both apps.
+
+## Windows app (`windows/`)
+
+- C# 5 on .NET Framework 4.8, compiled by Windows' own `csc.exe` (x64). `scripts/build.ps1`
+  writes `obj/Version.cs` from `versionName`, builds `obj/T7Drop.exe` and `obj/Tests.exe`,
+  runs the unit tests (`Tests.exe test <exe> <repository>`) and copies the exe to the
+  repository's `dist/T7Drop.exe`.
+- `src/`: `Program` (entry point: `--send <files>` from Explorer's Send To, `--exit`),
+  `Instance` (one copy per user and data folder; a second start hands "send", "show" or
+  "exit" to the first through a named pipe only this user may open), `TrayApp` (icon, menu,
+  notifications, restarts after waking and network changes, the update flow), `Worker` (the
+  loop on its own thread: long poll, backoff; `Kick` ends a long poll or a pause, `Restart`
+  also cuts a transfer in flight), `Transfers` (the CLI agent's logic), `Api` (HttpClient),
+  `ItemCrypto` and `Sodium` (libsodium through P/Invoke), `Store` (the data folder; the
+  pairing under DPAPI), `Settings` (also `Paths`, `Log`), `Pairing`, `Names`, `QrCode`
+  (Project Nayuki's encoder, ported), `Sender` (queues what the user sends; folders as zip),
+  `Shell` (links, the clipboard, the Send To shortcut), the windows `PairForm`, `QrForm`,
+  `HistoryForm`, `SettingsForm` (built in code, sized in em; `Ui` has the helpers), `Icons`;
+  `Updater`, `SleepWatcher` and `Autostart` come from ping-tray.
+- `lib/libsodium.dll`: the official libsodium 1.0.22 MSVC x64 build (`lib/README.md`: source,
+  signature, hashes). Embedded in the exe, written to `lib\<hash>\` in the data folder and
+  loaded with LoadLibrary before any P/Invoke. It needs `VCRUNTIME140.dll`; without it the app
+  names the Visual C++ Redistributable. The mingw build needs a libgcc DLL it does not ship.
+- Data in `%LOCALAPPDATA%\T7Drop`: `pairing.dat` (DPAPI, current user), `settings.ini`,
+  `devices.json`, `outbox\<id>\` (item.json, meta.bin, data.bin, as the CLI), `incoming\`,
+  `received.json`, `history.json`, `t7drop.log` (ids and sizes, no names or texts).
+  `T7DROP_HOME` makes a test copy: its own data, single-instance name, and download folder
+  (`<home>\downloads`), and it leaves Start with Windows and Send To alone.
+- Tests: `windows/tests/Tests.cs` (vectors, QR symbols against segno's in `qr-vectors.txt`,
+  names and invitations as the CLI makes them, store, queueing, updater) and
+  `windows/tests/Agent.cs`: `Tests.exe agent <home> pair|join|invite|send-file|send-text|
+  status|retry|cancel|run ...` drives the engine without windows. `tests/test_windows.py`
+  runs it against an in-process server with the CLI as the phone (both ways, a lost ack,
+  upload and download resumed after a kill, a server restart, retry to a re-paired phone,
+  cancel); it is skipped until `Tests.exe` is built. `windows/tests/make_qr_vectors.py`
+  writes the QR vectors; segno pads differently from the standard when data ends on a
+  codeword boundary, so it patches in the standard padding.
+- Decisions:
+  - The first start turns on Start with Windows and the Send To entry (Settings turn them
+    off). A second start of the exe shows the running copy's history window.
+  - Recipient: the device chosen in Settings; otherwise, on the first device, the newest
+    device paired after it (the phone it invited, not an old entry of another group).
+  - Queueing writes the item into `outbox\.<id>.new` and renames the folder, so the worker
+    never sees half an item. JSON and the pairing are replaced by a MoveFileEx rename over
+    the old file, and readers share delete access, so a reader never sees a missing or
+    partial file and never blocks a writer (`File.Replace` did both).
+  - A received file is decrypted into a hidden `.<name>.<id8>.t7drop-part` in the download
+    folder and renamed when complete.
+  - Waking (Kernel-Power 507 or PowerModeChanged, 1 s after the last) and network changes
+    (2 s after the last) call `Worker.Restart`: a long poll on a connection that died in
+    standby would otherwise hang until its 70 s time-out.
+  - A text's notification opens it if the whole text is one http(s) link, else copies it.
+    Only http(s) links are ever opened. Auto-copy is a setting, off by default.
+  - Send clipboard takes copied files first, then text, then a picture (as PNG): Office puts
+    a picture of copied text beside it.
+- Trying it (the recipes and this machine's paths are in `AGENTS.local.md`): a local server,
+  a test copy of `dist/T7Drop.exe` with `T7DROP_HOME`, the CLI as the phone; `T7Drop.exe
+  --exit` ends a copy. WinForms text boxes show as panes in UI Automation, whose automation
+  id is the window handle: WM_SETTEXT and BM_CLICK work on them. Self-update:
+  `windows/scripts/fake-release-server.js` serves a `latest.json` and a higher-version exe;
+  start a copy with `T7DROP_RELEASES_URL=http://127.0.0.1:<port>/latest`; the check runs a
+  minute after start.
 
 ## Code rules
 
@@ -121,7 +186,7 @@ the push. Once pushed, assume it is public forever.**
 - A response without `X-T7drop-Instance` is not from t7drop. Clients treat it as a
   temporary failure, never as "unpaired" or "item gone".
 - Tests: `python -m pytest` in a venv with `requirements-dev.txt` (where it is on this
-  machine: `AGENTS.local.md`).
+  machine: `AGENTS.local.md`); `tests/test_windows.py` needs `windows/scripts/build.ps1` first.
 
 ## Toolchains
 

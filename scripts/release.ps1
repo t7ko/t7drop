@@ -1,15 +1,17 @@
 <#
 .SYNOPSIS
-Publishes the version in android/app/build.gradle.kts as a GitHub release with its APK.
+Publishes the version in android/app/build.gradle.kts as a GitHub release with the APK and
+T7Drop.exe.
 
 .DESCRIPTION
 Run it on main with everything committed. It builds dist/t7drop-<version>.apk
-(android/scripts/build.ps1), tags the last commit v<version>, pushes main and the tag
-(scripts/push.ps1, which first scans the history for private data), creates the GitHub
-release and uploads the APK. Obtainium on the phone finds new releases at
-https://github.com/t7ko/t7drop and takes the APK. Each step is skipped when already done,
-so the script can be run again after a failure. The Windows app (M4) will be attached to
-the same releases.
+(android/scripts/build.ps1) and dist/T7Drop.exe (windows/scripts/build.ps1, which takes the
+same version and runs the Windows tests), tags the last commit v<version>, pushes main and
+the tag (scripts/push.ps1, which first scans the history for private data), creates the
+GitHub release and uploads both. Obtainium on the phone finds new releases at
+https://github.com/t7ko/t7drop and takes the APK; the Windows app's updater takes T7Drop.exe
+from the latest release. Each step is skipped when already done, so the script can be run
+again after a failure.
 
 The token is read from the file that github.tokenFile in the git-ignored local.properties
 names. It is never printed.
@@ -29,7 +31,8 @@ $gradleFile = Get-Content (Join-Path $root 'android/app/build.gradle.kts') -Raw
 if ($gradleFile -notmatch 'versionName = "([^"]+)"') { throw 'versionName not found in android/app/build.gradle.kts.' }
 $version = $Matches[1]
 $tag = "v$version"
-$assetName = "t7drop-$version.apk"
+$apkName = "t7drop-$version.apk"
+$exeName = 'T7Drop.exe'  # the name the Windows updater looks for (windows/src/Updater.cs)
 
 if ((Invoke-Git rev-parse --abbrev-ref HEAD) -ne 'main') { throw 'Release from main.' }
 if (Invoke-Git status --porcelain) { throw 'Commit your changes first: a release is built from a commit.' }
@@ -42,7 +45,10 @@ if (Invoke-Git tag --list $tag) {
 }
 
 & (Join-Path $root 'android/scripts/build.ps1')
-$apk = Join-Path $root "dist/$assetName"
+$apk = Join-Path $root "dist/$apkName"
+& (Join-Path $root 'windows/scripts/build.ps1')
+$exe = Join-Path $root "dist/$exeName"
+if ((Get-Item $exe).VersionInfo.FileVersion -ne "$version.0") { throw "$exe is not version $version." }
 
 & (Join-Path $PSScriptRoot 'push.ps1') main $tag
 
@@ -69,11 +75,13 @@ try {
         -ContentType 'application/json; charset=utf-8' -Body ([Text.Encoding]::UTF8.GetBytes($body))
 }
 
-if ($release.assets | Where-Object { $_.name -eq $assetName }) {
-    Write-Host "$assetName is already attached."
-} else {
-    $uploadUrl = $release.upload_url -replace '\{.*\}$', ''
-    Invoke-RestMethod -Method Post "$($uploadUrl)?name=$assetName" -Headers $headers `
-        -ContentType 'application/vnd.android.package-archive' -InFile $apk | Out-Null
+$uploadUrl = $release.upload_url -replace '\{.*\}$', ''
+foreach ($asset in @(@($apkName, $apk, 'application/vnd.android.package-archive'), @($exeName, $exe, 'application/octet-stream'))) {
+    if ($release.assets | Where-Object { $_.name -eq $asset[0] }) {
+        Write-Host "$($asset[0]) is already attached."
+    } else {
+        Invoke-RestMethod -Method Post "$($uploadUrl)?name=$($asset[0])" -Headers $headers `
+            -ContentType $asset[2] -InFile $asset[1] | Out-Null
+    }
 }
-Write-Host "Released $tag with $assetName at $($release.html_url)"
+Write-Host "Released $tag with $apkName and $exeName at $($release.html_url)"

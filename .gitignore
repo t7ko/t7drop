@@ -8,6 +8,8 @@ local.properties
 .claude/settings.local.json
 AGENTS.local.md
 CLAUDE.local.md
+# windows/: build output (scripts/build.ps1)
+obj/
 # android/: Gradle caches and build output
 .gradle/
 .kotlin/

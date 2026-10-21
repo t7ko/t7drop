@@ -27,7 +27,7 @@ import sys
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 LOCAL = os.path.join(ROOT, "local")
 
-ALLOWED_IPS = {"127.0.0.1", "0.0.0.0", "1.1.1.1", "8.8.8.8"}
+ALLOWED_IPS = {"127.0.0.1", "0.0.0.0", "1.1.1.1", "8.8.8.8", "1.0.0.0"}  # 1.0.0.0: the version in app manifests
 ALLOWED_IP_PREFIXES = ("192.0.2.", "198.51.100.", "203.0.113.", "10.", "192.168.")
 ALLOWED_EMAILS = {"noreply@anthropic.com", "ivan.t7ko@gmail.com"}
 # The public test key (bytes 0..31) of testdata/vectors and the unit tests.

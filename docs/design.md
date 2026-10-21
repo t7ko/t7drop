@@ -194,6 +194,24 @@ user's profile (it is a test tool).
 - `libsodium.dll` (the official build) is embedded in the exe, written out at the first
   start and called through P/Invoke. A QR code encoder is ported into the source.
 - Token and K are protected with DPAPI.
+- As built in M4: the CLI agent's logic (`Transfers`) runs on a thread of its own
+  (`Worker`) that long-polls `/sync` while nothing else is to be done and retries with
+  backoff. A new item, a retry or a cancel ends the long poll at once; waking from sleep
+  (Kernel-Power 507 for Modern Standby) and network changes also cut a transfer in flight
+  and retry without waiting. libsodium is 1.0.22's MSVC x64 DLL, which needs the Visual C++
+  runtime (the mingw build needs a libgcc DLL it does not include). The QR encoder is
+  Project Nayuki's algorithm, checked against segno's symbols.
+- The first device pairs with a code from t7drop-admin (server address, code and name in a
+  window), creates K and shows the invitation as a QR code at once; it notices when a new
+  device has paired. Items go to the device chosen in the settings, or else to the newest
+  device paired after this one: the phone it invited, not an old device of another group.
+- Received files are decrypted into a hidden `.<name>.<id>.t7drop-part` in the download
+  folder and renamed when complete. The history window lists what was received and sent,
+  with the states and Retry or Cancel; dropping files or text on it sends them, and Ctrl+V
+  sends the clipboard. A folder is sent as a zip.
+- One copy runs per user: a second start hands Send To's files to it, or shows its history
+  window, through a named pipe. Start with Windows and the Send To entry are turned on at the
+  first start and can be turned off in the settings. The updater is ping-tray's.
 
 ## Releases
 
