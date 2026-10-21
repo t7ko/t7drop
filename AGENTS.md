@@ -98,7 +98,14 @@ the push. Once pushed, assume it is public forever.**
   encryption tests run on a device (`app/src/androidTest/`, with `testdata/vectors` as
   assets): `gradlew.bat connectedDebugAndroidTest`. `scripts/build.ps1` builds the signed
   release APK into `dist/`; `scripts/emulator-ui.py` taps through the app over adb.
+- Android release builds are signed with a key kept outside the repository; the git-ignored
+  `android/local.properties` names it (`release.storeFile`, `release.storePasswordFile`,
+  `release.keyAlias`). Certificate SHA-256:
+  `3da8fbdde68e4afaae3e738842743d7fc82534a3f59b6703f7e53f6cddcb79dc`. Every update must use
+  this key, or the app has to be uninstalled and loses its data.
 - `windows/` (M4): the tray app.
+- `scripts/push.ps1` pushes to GitHub with the token (after `scan_private.py --history`);
+  `scripts/release.ps1` publishes release `v<versionName>` with the APK for Obtainium.
 
 ## Code rules
 
