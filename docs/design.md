@@ -159,9 +159,23 @@ user's profile (it is a test tool).
 - Undelivered items are checked again (and uploaded again after a server restart) when the
   app opens, and by a worker with backoff while any are left.
 - The Xiaomi card from quick-alarms: Autostart, and battery saver "No restrictions".
-- libsodium: a maintained binding with secretstream (ionspin kotlin-multiplatform-libsodium
-  or lazysodium-android), chosen in M3; the fallback is libsodium built with the NDK.
-- QR scanner: chosen in M3 (embedded ZXing, or ML Kit).
+- libsodium: lazysodium-android 5.2 through JNA (the AAR, with its native part; the
+  desktop JAR it asks for is excluded); native code for arm64-v8a and x86_64 only.
+- QR scanner: zxing-android-embedded (no Google services). An invitation can also come
+  as a `t7drop:pair?...` link, which opens the app.
+- As built in M3 (minSdk 29): one unique WorkManager job, "transfer", does all the work
+  (send, sync, receive). `Scheduler.kick` lets a running job finish and queues one more
+  run after it, and replaces a job that waits out a retry pause. While the main screen
+  is open it long-polls `/sync` and kicks the job whenever the device's version changes;
+  closed, nothing runs until a share or the next opening. The job goes foreground (a
+  "Transferring" notification, type dataSync) only for items over 1 MB; received items
+  post a notification when the app is not open.
+- Received files are written through MediaStore with IS_PENDING, so they appear in
+  Downloads/t7drop only when complete; texts stay in the app's list. The pairing (token
+  and group key) is encrypted with an Android Keystore key; `allowBackup` is off.
+- Sending goes to the device that may invite (the laptop) when there are several.
+- Debug builds allow plain HTTP to 10.0.2.2 (the computer running the emulator), for a
+  test server there; release builds only HTTPS.
 - Release builds signed with the app's own key, published as GitHub releases, installed
   and updated through Obtainium.
 

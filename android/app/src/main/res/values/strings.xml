@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">t7drop</string>
+    <!-- The name in the share sheet. -->
+    <string name="share_label">t7drop</string>
+</resources>

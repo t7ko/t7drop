@@ -8,3 +8,10 @@ local.properties
 .claude/settings.local.json
 AGENTS.local.md
 CLAUDE.local.md
+# android/: Gradle caches and build output
+.gradle/
+.kotlin/
+build/
+captures/
+.idea/
+*.iml

@@ -43,6 +43,13 @@ the push. Once pushed, assume it is public forever.**
   Memory: the process peaked at 64 MB (VmHWM), 33 MB after; the cgroup's 113 MB peak was
   mostly page cache. M2 done; the user confirmed the other services work after the nginx
   change.
+- 2026-10-21: M3, the Android app, works on the emulator against a local server: pairing
+  by link, texts and files both ways (share sheet, file picker), 200 MB each way,
+  airplane mode with the app killed (delivered 17 s after the network returned), the
+  app killed with kill -9 during an upload (resumed with the missing chunks only), an
+  update during a download (finished, identical). The encryption tests pass on the
+  emulator with the app's libsodium. Not yet: the release key, the real server, the
+  phone, QR scanning with a camera.
 
 ## Working with the VPS
 
@@ -80,7 +87,18 @@ the push. Once pushed, assume it is public forever.**
   refuse); the Android and Windows apps test against the same files.
 - `tools/scan_private.py`: the check for private data before commits and pushes (see the
   top of this file).
-- `android/` (M3), `windows/` (M4): the apps.
+- `android/`: the Android app (Kotlin, Compose), its own Gradle project; `CLAUDE.md`
+  there imports the t7helpers Android notes (toolchain, emulator). In
+  `app/src/main/java/t7helpers/t7drop/`: `Protocol`, `Pairing` (the invitation),
+  `crypto/ItemCrypto` (secretstream, as the CLI), `net/Api`, `data/Store` (pairing,
+  outbox, received list) and `data/Secrets` (Keystore), `transfer/Transfers` (the logic
+  of the CLI's agent) and `transfer/TransferWorker` (WorkManager, `Scheduler.kick`),
+  `Sender` (queueing shares), `Notifications`, `ui/` (MainActivity with the long poll,
+  PairScreen, HomeScreen, Cards, ShareActivity). Unit tests in `app/src/test/`; the
+  encryption tests run on a device (`app/src/androidTest/`, with `testdata/vectors` as
+  assets): `gradlew.bat connectedDebugAndroidTest`. `scripts/build.ps1` builds the signed
+  release APK into `dist/`; `scripts/emulator-ui.py` taps through the app over adb.
+- `windows/` (M4): the tray app.
 
 ## Code rules
 

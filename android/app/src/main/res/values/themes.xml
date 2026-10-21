@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Only the window before Compose draws; Compose sets its own colors. -->
+    <style name="Theme.T7drop" parent="android:Theme.Material.Light.NoActionBar" />
+    <!-- The share screen: a small card over the app that shares. -->
+    <style name="Theme.T7drop.Translucent" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:windowIsTranslucent">true</item>
+        <item name="android:windowBackground">@android:color/transparent</item>
+        <item name="android:backgroundDimEnabled">true</item>
+    </style>
+</resources>

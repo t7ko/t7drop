@@ -30,6 +30,8 @@ LOCAL = os.path.join(ROOT, "local")
 ALLOWED_IPS = {"127.0.0.1", "0.0.0.0", "1.1.1.1", "8.8.8.8"}
 ALLOWED_IP_PREFIXES = ("192.0.2.", "198.51.100.", "203.0.113.", "10.", "192.168.")
 ALLOWED_EMAILS = {"noreply@anthropic.com", "ivan.t7ko@gmail.com"}
+# The public test key (bytes 0..31) of testdata/vectors and the unit tests.
+TEST_KEY = "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8"
 
 PATTERNS = [
     ("IPv4 address", re.compile(rb"(?<![\d.])(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})(?![\d.])")),
@@ -112,6 +114,8 @@ def check(label, data, literals):
                 if ip in ALLOWED_IPS or ip.startswith(ALLOWED_IP_PREFIXES) or any(int(p) > 255 for p in ip.split(".")):
                     continue
             if name == "e-mail address" and value.lower() in ALLOWED_EMAILS:
+                continue
+            if name == "pairing invitation with a key" and value.endswith("k=" + TEST_KEY):
                 continue
             problems.append("%s %s..." % (name, value[:4]))
     for problem in sorted(set(problems)):
