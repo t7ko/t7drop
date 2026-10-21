@@ -36,14 +36,10 @@ class Shared(val uris: List<Uri>, val text: String?) {
 
 /** Encrypts and queues items for the other device, then starts a transfer. */
 object Sender {
-    /**
-     * The device to send to: with two devices, the other one. With more, the first
-     * device (the one that invites the others), else the first in the list.
-     */
+    /** The device to send to: the one that invited this phone (Recipients.pick). */
     fun recipient(store: Store): String? {
         val me = store.config()?.deviceId ?: return null
-        val others = store.devices().filter { it.id != me }
-        return (others.firstOrNull { it.canInvite } ?: others.firstOrNull())?.id
+        return Recipients.pick(store.devices(), me)
     }
 
     /** Blocking. Returns a message for the user. */

@@ -21,9 +21,10 @@ class Config(val url: String, val deviceId: String, val deviceName: String, val 
     }
 }
 
-class Device(val id: String, val name: String, val canInvite: Boolean)
+/** A paired device as the server lists it; created is Unix time in seconds. */
+class Device(val id: String, val name: String, val canInvite: Boolean, val created: Long = 0)
 
-/** A received item as the app lists it: a text, or a file saved to Downloads/t7drop. */
+/** A received item as the app lists it: a text, or a file saved to Downloads. */
 class Received(
     val id: String,
     val kind: String,
@@ -163,7 +164,7 @@ class Store private constructor(context: Context) {
     }
 
     fun devices(): List<Device> = readArray(devicesFile).map {
-        Device(it.getString("id"), it.getString("name"), it.optBoolean("can_invite"))
+        Device(it.getString("id"), it.getString("name"), it.optBoolean("can_invite"), it.optLong("created"))
     }
 
     fun saveDevices(devices: JSONArray) {

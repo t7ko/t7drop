@@ -148,6 +148,8 @@ namespace T7Drop
                 RemoveSelected();
             else if (e.KeyCode == Keys.Enter && list.Focused)
                 DefaultAction();
+            else if (e.KeyCode == Keys.Escape)
+                Close();
             else
                 return;
             e.Handled = true;

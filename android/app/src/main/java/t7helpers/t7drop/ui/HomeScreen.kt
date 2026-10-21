@@ -136,7 +136,7 @@ fun HomeScreen(
             }
             item { Heading("Received") }
             if (history.isEmpty()) {
-                item { Text("Nothing yet. What the laptop sends appears here; files go to Downloads/t7drop.") }
+                item { Text("Nothing yet. What the laptop sends appears here; files go to Downloads.") }
             }
             items(history, key = { "in-" + it.id }) { ReceivedCard(store, it) }
             if (delivered.isNotEmpty()) {

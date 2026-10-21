@@ -303,7 +303,8 @@ namespace T7Drop
         /// Where items go: the device chosen in the settings while it is paired. Otherwise, on the
         /// first device of a group, the newest device paired after it: every device of its group
         /// was invited by it, so an older one belongs to another group and could not decrypt.
-        /// On others, the newest device that may invite. Null when there is none.
+        /// On others, the newest device that may invite and was paired before this one. Null
+        /// when there is none.
         /// </summary>
         public string Recipient(Config config, string preferred)
         {
@@ -312,9 +313,16 @@ namespace T7Drop
             if (preferred != null && others.Any(d => d.Id == preferred))
                 return preferred;
             Device me = devices.FirstOrDefault(d => d.Id == config.DeviceId);
-            Device best = config.First && me != null
-                ? others.FirstOrDefault(d => d.Created >= me.Created)
-                : others.FirstOrDefault(d => d.CanInvite) ?? others.FirstOrDefault();
+            if (config.First && me != null)
+            {
+                Device invited = others.FirstOrDefault(d => d.Created >= me.Created);
+                return invited == null ? null : invited.Id;
+            }
+            // Invited: the device that invited this one, paired before it (an older inviter is
+            // another group's); as the Android app's Recipients.pick.
+            long mine = me != null ? me.Created : long.MaxValue;
+            Device best = others.FirstOrDefault(d => d.CanInvite && d.Created <= mine)
+                ?? others.FirstOrDefault(d => d.CanInvite) ?? others.FirstOrDefault();
             return best == null ? null : best.Id;
         }
 

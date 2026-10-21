@@ -56,7 +56,7 @@ object Notifications {
         if (ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) return
         ensureChannels(context)
         val title = if (item.kind == "text") "Text from ${item.from}" else "${item.name} from ${item.from}"
-        val text = if (item.kind == "text") item.text.orEmpty().take(200) else "Saved to Downloads/t7drop"
+        val text = if (item.kind == "text") item.text.orEmpty().take(200) else "Saved to Downloads"
         val notification = NotificationCompat.Builder(context, CHANNEL_RECEIVED)
             .setSmallIcon(R.drawable.ic_stat_t7drop)
             .setContentTitle(title)

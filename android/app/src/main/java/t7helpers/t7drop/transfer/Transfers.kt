@@ -276,13 +276,13 @@ class Transfers(
         return part
     }
 
-    /** Saves into Downloads/t7drop; the file shows only once it is complete. */
+    /** Saves into Downloads; the file shows only once it is complete. */
     private fun saveToDownloads(name: String, mime: String, write: (OutputStream) -> Unit): Uri {
         val resolver = context.contentResolver
         val values = ContentValues().apply {
             put(MediaStore.Downloads.DISPLAY_NAME, name)
             put(MediaStore.Downloads.MIME_TYPE, mime)
-            put(MediaStore.Downloads.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS + "/t7drop")
+            put(MediaStore.Downloads.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS)
             put(MediaStore.Downloads.IS_PENDING, 1)
         }
         val uri = resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values)

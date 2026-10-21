@@ -16,7 +16,7 @@ namespace T7Drop
     /// <summary>The settings, as key=value lines in settings.ini in the data folder.</summary>
     class Settings
     {
-        public string DownloadFolder;  // null: Downloads\t7drop
+        public string DownloadFolder;  // null: the Downloads folder
         public bool AutoCopy;          // copy received texts to the clipboard at once
         public UpdateMode Updates = UpdateMode.Auto;
         public string SendTo;          // a device id, or null for the usual recipient (Store.Recipient)
@@ -88,7 +88,7 @@ namespace T7Drop
         {
             var text = new StringBuilder();
             text.AppendLine("# t7drop settings. Change them in the Settings window, or edit this file and restart t7drop.");
-            text.AppendLine("# download_folder: empty for Downloads\\t7drop");
+            text.AppendLine("# download_folder: empty for the Downloads folder");
             text.AppendLine("download_folder=" + (DownloadFolder ?? ""));
             text.AppendLine("auto_copy=" + (AutoCopy ? "true" : "false"));
             text.AppendLine("# updates: auto (install new releases), notify (offer them) or off");
@@ -130,12 +130,12 @@ namespace T7Drop
         }
 
         /// <summary>
-        /// Downloads\t7drop, where the user's Downloads folder is (it may have been moved); a test
-        /// copy's own downloads folder in its data folder.
+        /// The user's Downloads folder, wherever it is (it may have been moved), as the Android
+        /// app saves into Downloads; a test copy's own downloads folder in its data folder.
         /// </summary>
         public static string DefaultDownloads
         {
-            get { return IsTestCopy ? Path.Combine(Home, "downloads") : Path.Combine(KnownDownloads(), "t7drop"); }
+            get { return IsTestCopy ? Path.Combine(Home, "downloads") : KnownDownloads(); }
         }
 
         static string KnownDownloads()

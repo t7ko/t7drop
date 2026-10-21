@@ -155,7 +155,7 @@ user's profile (it is a test tool).
   swiped away and the phone restarting. No permanent service.
 - Main screen: the inbox (long poll while the app is open) and the sent items with their
   states, Retry and Cancel. Text: tap to copy, links open. Files: saved to
-  `Downloads/t7drop` through MediaStore (no storage permission), then Open or Share.
+  `Downloads` through MediaStore (no storage permission), then Open or Share.
 - Undelivered items are checked again (and uploaded again after a server restart) when the
   app opens, and by a worker with backoff while any are left.
 - The Xiaomi card from quick-alarms: Autostart, and battery saver "No restrictions".
@@ -171,7 +171,7 @@ user's profile (it is a test tool).
   "Transferring" notification, type dataSync) only for items over 1 MB; received items
   post a notification when the app is not open.
 - Received files are written through MediaStore with IS_PENDING, so they appear in
-  Downloads/t7drop only when complete; texts stay in the app's list. The pairing (token
+  Downloads only when complete; texts stay in the app's list. The pairing (token
   and group key) is encrypted with an Android Keystore key; `allowBackup` is off.
 - Sending goes to the device that may invite (the laptop) when there are several.
 - Debug builds allow plain HTTP to 10.0.2.2 (the computer running the emulator), for a
@@ -185,7 +185,7 @@ user's profile (it is a test tool).
   single instance, Start with Windows, self-update from GitHub, `SleepWatcher`) into its
   own source; nothing is shared with ping-tray.
 - Receiving: long poll; after Modern Standby it polls again at once. Files go to a folder
-  (default `Downloads\t7drop`), with names cleaned of what Windows forbids. Text and links
+  (default: Downloads), with names cleaned of what Windows forbids. Text and links
   go to the history and show a notification; clicking it copies the text or opens the
   link. Copying text automatically is a setting, off by default.
 - Sending: "Send clipboard" in the tray menu (text, an image, or copied files), an entry in
@@ -206,7 +206,8 @@ user's profile (it is a test tool).
   device has paired. Items go to the device chosen in the settings, or else to the newest
   device paired after this one: the phone it invited, not an old device of another group.
 - Received files are decrypted into a hidden `.<name>.<id>.t7drop-part` in the download
-  folder and renamed when complete. The history window lists what was received and sent,
+  folder and renamed when complete. Both apps save into the Downloads folder itself, not a
+  subfolder (the user's choice, 2026-10-21; until 0.2.0 it was `Downloads/t7drop`). The history window lists what was received and sent,
   with the states and Retry or Cancel; dropping files or text on it sends them, and Ctrl+V
   sends the clipboard. A folder is sent as a zip.
 - One copy runs per user: a second start hands Send To's files to it, or shows its history

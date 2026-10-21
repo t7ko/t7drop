@@ -36,6 +36,7 @@ namespace T7Drop
         Connection state = Connection.Connecting;
         string problem, activity;
         DateTime nextTry;
+        DateTime lostSince = DateTime.UtcNow;  // when the connection was last cut or failed; MinValue while it works
 
         /// <summary>Raised on the worker's thread whenever State, Problem, NextTry or Activity change.</summary>
         public event Action StatusChanged;
@@ -78,10 +79,13 @@ namespace T7Drop
             {
                 kicked = true;
                 delay = 1;
+                if (lostSince == DateTime.MinValue)
+                    lostSince = DateTime.UtcNow;
                 if (round != null)
                     round.Cancel();
                 Monitor.PulseAll(gate);
             }
+            Log.Write("connecting again (woke up, or the network changed)");
         }
 
         public void Stop()
@@ -133,8 +137,15 @@ namespace T7Drop
                 try
                 {
                     transfers.RunOnce(quick ? 0 : LongPollSeconds, roundSource.Token, pollSource.Token);
+                    DateTime lost;
                     lock (gate)
+                    {
                         delay = 1;
+                        lost = lostSince;
+                        lostSince = DateTime.MinValue;
+                    }
+                    if (lost != DateTime.MinValue)
+                        Log.Write("connected, " + (DateTime.UtcNow - lost).TotalSeconds.ToString("0.0") + " s after the connection was lost");
                     SetStatus(Connection.Online, null, DateTime.MinValue);
                 }
                 catch (OperationCanceledException)
@@ -170,6 +181,8 @@ namespace T7Drop
             double pause;
             lock (gate)
             {
+                if (lostSince == DateTime.MinValue)
+                    lostSince = DateTime.UtcNow;
                 pause = delay * (0.5 + random.NextDouble() / 2);
                 delay = Math.Min(delay * 2, MaxDelaySeconds);
             }

@@ -263,7 +263,8 @@ namespace T7Drop.Tests
             Equal(false, defaults.AutoCopy, "auto copy is off by default");
             Equal(UpdateMode.Auto, defaults.Updates, "updates install by default");
             Equal(true, defaults.SendToMenu, "Send To is on by default");
-            Equal(true, defaults.ReceiveFolder.EndsWith("\\t7drop"), "received files go to ...\\t7drop: " + defaults.ReceiveFolder);
+            Equal(true, !defaults.ReceiveFolder.EndsWith("\\t7drop") && Directory.Exists(defaults.ReceiveFolder),
+                "received files go to the Downloads folder itself: " + defaults.ReceiveFolder);
             var settings = new Settings { DownloadFolder = @"D:\in", AutoCopy = true, Updates = UpdateMode.Notify, SendTo = "abc", SendToMenu = false };
             Settings back = Settings.Parse(settings.Format());
             Equal(settings.Format(), back.Format(), "settings survive the file");
@@ -308,7 +309,19 @@ namespace T7Drop.Tests
                 Device("dddddddddddd", "laptop-cli", 150, true), Device("eeeeeeeeeeee", "phone", 300, false),
             });
             var invited = new Config { DeviceId = "eeeeeeeeeeee", First = false };
-            Equal("aaaaaaaaaaaa", store.Recipient(invited, null), "an invited device sends to the newest that may invite");
+            Equal("aaaaaaaaaaaa", store.Recipient(invited, null), "an invited device sends to the device that invited it");
+            store.SaveDevices(new object[]
+            {
+                Device("aaaaaaaaaaaa", "laptop", 200, true), Device("dddddddddddd", "laptop-cli", 150, true),
+                Device("ffffffffffff", "tablet", 180, false),
+            });
+            var tablet = new Config { DeviceId = "ffffffffffff", First = false };
+            Equal("dddddddddddd", store.Recipient(tablet, null), "not to an inviter paired after it");
+            store.SaveDevices(new object[]
+            {
+                Device("aaaaaaaaaaaa", "laptop", 200, true), Device("cccccccccccc", "old phone", 100, false),
+                Device("dddddddddddd", "laptop-cli", 150, true), Device("eeeeeeeeeeee", "phone", 300, false),
+            });
             Equal("phone", store.DeviceName("eeeeeeeeeeee"), "device names");
             store.SaveDevices(new object[] { Device("aaaaaaaaaaaa", "laptop", 200, true) });
             Equal(null, store.Recipient(config, null), "nobody to send to");

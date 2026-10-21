@@ -57,6 +57,17 @@ the push. Once pushed, assume it is public forever.**
   itself about 2 minutes later, once the network was back, without opening the app. That
   phone's HyperOS has no Autostart setting; Battery saver "No restrictions" was enough.
   Skipped by the user's choice: a very large file over mobile data. M3 done with v0.1.1.
+- 2026-10-21: M4, the Windows tray app: the end-to-end tests (`tests/test_windows.py`) and,
+  against a local server, a test copy (pairing window, QR code, Send To, Send clipboard,
+  offline and back, self-update through `fake-release-server.js`). Then on the real server
+  with the user's phone: the app paired with an admin code, the phone unpaired and scanned
+  its QR code, and `laptop-cli` and the phone's old entry were revoked (the phone's 0.1.1
+  sent to the oldest device that may invite: fixed in 0.2.0 with `Recipients.pick`). Texts,
+  links and files both ways, Send clipboard, Send To, dropping on the history window,
+  "delivered" only after the phone took the item; after 4.5 minutes of Modern Standby with
+  the lid closed, a text from the phone arrived without a click. Windows 11 shows Send To
+  only under "Show more options". The user's choices: received files go to Downloads itself
+  on both apps, Escape closes the history window (both in 0.2.0).
 
 ## Working with the VPS
 

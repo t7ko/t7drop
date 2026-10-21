@@ -24,7 +24,7 @@ Windows warns about programs from the internet without a signature; choose More 
 anyway. At the first start it asks for the server address and a pairing code from
 `t7drop-admin invite <name>`, then shows a QR code that pairs the phone.
 
-- Received files go to `Downloads\t7drop`; texts and links show in a notification (click:
+- Received files go to the Downloads folder; texts and links show in a notification (click:
   copy, or open the link) and in the history window (click the tray icon).
 - Send: Send clipboard in the tray menu (text, a picture, or copied files), Send To in
   Explorer's menu, or drop files and text on the history window.
