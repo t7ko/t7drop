@@ -68,6 +68,9 @@ the push. Once pushed, assume it is public forever.**
   the lid closed, a text from the phone arrived without a click. Windows 11 shows Send To
   only under "Show more options". The user's choices: received files go to Downloads itself
   on both apps, Escape closes the history window (both in 0.2.0).
+- 2026-10-21/22: v0.2.0 published (`t7drop-0.2.0.apk` and `T7Drop.exe`). The user's 0.1.1
+  updated itself from the GitHub release through Check for updates, and the phone took the
+  APK through Obtainium. M4 done.
 
 ## Working with the VPS
 
