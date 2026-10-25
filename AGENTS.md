@@ -92,9 +92,12 @@ the push. Once pushed, assume it is public forever.**
   restart to show as "not reachable" was timing-dependent: the agent now logs the quiet
   path too. Item 3: refused ids kept on disk for 8 days, stale partial downloads and
   unfinished decryptions removed after a day, delivered items after 30 days, on all three
-  clients (`docs/design.md`, "Reliability"). With it M5 is done. The app changes of items 2
-  and 3 reach the devices with the next release (0.3.0, the first with a signed exe), made
-  only when the user asks.
+  clients (`docs/design.md`, "Reliability"). With it M5 is done.
+- 2026-10-25: v0.3.0 published at the user's word (`t7drop-0.3.0.apk`, `T7Drop.exe`,
+  `T7Drop.exe.sig`; the assets' digests match `dist/`, the APK has the app's certificate).
+  The first signed exe: the user's 0.2.0 takes it unchecked, and every later update must be
+  signed with the release key. The user backs up that key. The user's laptop and phone both
+  updated to 0.3.0 (the laptop by itself from GitHub, the phone through Obtainium).
 
 ## Working with the VPS
 
