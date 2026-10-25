@@ -88,6 +88,13 @@ the push. Once pushed, assume it is public forever.**
   without invisible format characters on all clients, Android (share only other apps'
   content, the pairing form names the server, no redirects, no device-to-device copy of
   its data). `tests/test_sources.py` keeps invisible characters out of the repository.
+  Commit bb0ff3b, deployed with `deploy.sh` (sandbox rating 1.3, OK). A test that needed a
+  restart to show as "not reachable" was timing-dependent: the agent now logs the quiet
+  path too. Item 3: refused ids kept on disk for 8 days, stale partial downloads and
+  unfinished decryptions removed after a day, delivered items after 30 days, on all three
+  clients (`docs/design.md`, "Reliability"). With it M5 is done. The app changes of items 2
+  and 3 reach the devices with the next release (0.3.0, the first with a signed exe), made
+  only when the user asks.
 
 ## Working with the VPS
 

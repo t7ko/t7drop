@@ -1,6 +1,8 @@
 """The CLI against a real server: two devices, sending and receiving."""
 
 import os
+import time
+import uuid
 
 import pytest
 
@@ -213,6 +215,50 @@ def test_an_item_from_another_group_is_refused(server, pair_of, tmp_path, capsys
     assert "does not decrypt" in capsys.readouterr().out
     assert b.files() == []
     assert not os.path.exists(os.path.join(b.home, "received.json"))
+    assert b.receive() == 0, "a new run of the CLI"
+    assert "does not decrypt" not in capsys.readouterr().out, "the refusal was kept: not looked at again"
+
+
+def test_partial_downloads_of_items_gone_are_deleted_after_a_day(pair_of, tmp_path):
+    a, b = pair_of
+    profile = Profile(b.home)
+    os.makedirs(profile.incoming_dir)
+    old, recent, waiting = (os.path.join(profile.incoming_dir, "%s.part" % uuid.uuid4()) for _ in range(3))
+    two_days_ago = time.time() - 2 * 86400
+    for path in (old, recent, waiting):
+        with open(path, "wb") as f:
+            f.write(b"x" * 100)
+    os.utime(old, (two_days_ago, two_days_ago))
+    os.utime(waiting, (two_days_ago, two_days_ago))
+    profile.drop_stale_parts({os.path.basename(waiting)[:-len(".part")]}, time.time())
+    assert not os.path.exists(old)
+    assert os.path.exists(recent), "perhaps lost in a server restart: its sender may upload it again"
+    assert os.path.exists(waiting), "still in the inbox: its download goes on"
+    os.makedirs(b.downloads)
+    leftover = os.path.join(b.downloads, ".photo.jpg.0123abcd.t7drop-part")
+    not_ours = os.path.join(b.downloads, "notes.t7drop-part")
+    for path in (leftover, not_ours):
+        with open(path, "wb") as f:
+            f.write(b"x")
+        os.utime(path, (two_days_ago, two_days_ago))
+    os.utime(recent, (two_days_ago, two_days_ago))
+    assert b.receive() == 0, "a sync tidies up too"
+    assert not os.path.exists(recent)
+    assert not os.path.exists(leftover), "an old decryption that never finished"
+    assert os.path.exists(not_ours)
+
+
+def test_delivered_items_leave_the_outbox_after_30_days(pair_of):
+    a, b = pair_of
+    assert a.run("send", "--text", "old news") == 0
+    assert b.receive() == 0
+    assert a.receive() == 0
+    assert a.states() == ["delivered"]
+    item = Profile(a.home).outbox()[0]
+    item.data["changed"] = time.time() - 31 * 86400
+    item.save()
+    assert a.receive() == 0
+    assert a.states() == []
 
 
 def test_an_invited_device_may_not_invite(pair_of, tmp_path, capsys):

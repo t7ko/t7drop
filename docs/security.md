@@ -59,7 +59,7 @@ pairing locked; the server sees the metadata.
 
 | # | Finding | Severity | Done |
 | --- | --- | --- | --- |
-| D1 | The systemd sandbox allowed every system call and showed the service the whole `/proc` | Hardening | Added `SystemCallFilter=@system-service` (a blocked call fails with EPERM), `ProtectProc=invisible`, `ProcSubset=pid`, `RemoveIPC=yes`. Not `MemoryDenyWriteExecute`: ctypes (`prctl` in `main.py`) may need libffi closures. `check.sh` prints `systemd-analyze security`'s rating |
+| D1 | The systemd sandbox allowed every system call and showed the service the whole `/proc` | Hardening | Added `SystemCallFilter=@system-service` (a blocked call fails with EPERM), `ProtectProc=invisible`, `ProcSubset=pid`, `RemoveIPC=yes`. Not `MemoryDenyWriteExecute`: ctypes (`prctl` in `main.py`) may need libffi closures. `check.sh` prints `systemd-analyze security`'s rating: 1.3, "OK", on the VPS after the change |
 | D2 | An upgrade had no check and no way back but by hand | Medium (availability) | `deploy.sh` (M5 item 1): checks, and rolls back by itself |
 
 Checked and in order: the service runs as `t7drop` without capabilities, with

@@ -23,6 +23,7 @@ from .state import write_json
 CHUNK_SIZE = 4 * 1024 * 1024
 INLINE_MAX = 64 * 1024
 GIVE_UP_SECONDS = 7 * 86400
+KEEP_DELIVERED_SECONDS = 30 * 86400  # then a delivered item leaves the outbox, as in the apps
 
 QUEUED, UPLOADING, ON_SERVER, DELIVERED, FAILED = "queued", "uploading", "on_server", "delivered", "failed"
 
@@ -55,7 +56,6 @@ class Agent:
         self.now = now
         self.instance = None
         self.version = -1
-        self.refused = set()  # items that do not decrypt: not downloaded again
         self.interrupted = False  # an upload met a changed server: retry without a long poll
 
     # Queueing
@@ -148,10 +148,14 @@ class Agent:
         self._apply_outbox(snapshot["outbox"])
         for entry in snapshot["inbox"]:
             self._receive(entry)
+        self.profile.drop_stale_parts({e["id"] for e in snapshot["inbox"]}, self.now(), self.download_dir)
 
     def _apply_outbox(self, entries):
         on_server = {e["id"]: e for e in entries}
         for item in self.profile.outbox():
+            if item.state == DELIVERED and self.now() - item.data.get("changed", item.data["created"]) > KEEP_DELIVERED_SECONDS:
+                self.profile.forget(item)
+                continue
             if item.state in (DELIVERED, FAILED):
                 continue
             entry = on_server.get(item.id)
@@ -162,7 +166,7 @@ class Agent:
 
     def _receive(self, entry):
         item_id = entry["id"]
-        if item_id in self.refused:
+        if item_id in self.profile.refused():
             return
         if item_id in self.profile.received():
             self._ack(item_id)
@@ -171,11 +175,11 @@ class Agent:
         try:
             meta = crypto.open_meta(key, item_id, base64.b64decode(entry["meta"]))
         except (crypto.DecryptError, ValueError):
-            self.refused.add(item_id)
+            self.profile.mark_refused(item_id, self.now())
             self.out("Item %s does not decrypt with this device's key; not saved." % item_id)
             return
         if meta.get("to") != self.profile.device_id:
-            self.refused.add(item_id)
+            self.profile.mark_refused(item_id, self.now())
             self.out("Item %s is addressed to another device; not saved." % item_id)
             return
         part = self._download(entry)
@@ -185,7 +189,7 @@ class Agent:
             else:
                 self._save_file(item_id, meta, part)
         except crypto.DecryptError as e:
-            self.refused.add(item_id)
+            self.profile.mark_refused(item_id, self.now())
             self.out("Item %s did not decrypt (%s); not saved." % (item_id, e))
             return
         finally:

@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.RegularExpressions;
 
 namespace T7Drop
 {
@@ -203,17 +204,21 @@ namespace T7Drop
     /// <summary>
     /// The data folder (%LOCALAPPDATA%\T7Drop): pairing.dat, devices.json, outbox\, incoming\
     /// (downloads in progress), received.json (ids saved in the last 30 days, so that none is
-    /// saved twice), history.json (what was received), settings.ini, t7drop.log, lib\.
+    /// saved twice), refused.json (ids refused in the last 8 days, so that none is looked at
+    /// again), history.json (what was received), settings.ini, t7drop.log, lib\.
     /// </summary>
     class Store
     {
         public const int MaxHistory = 300;
         const long KeepReceivedMs = 30L * 86400 * 1000;
+        const long KeepRefusedMs = 8L * 86400 * 1000;  // the server keeps an item 7 days
         const long KeepDeliveredMs = 30L * 86400 * 1000;
+        static readonly TimeSpan StalePart = TimeSpan.FromDays(1);
+        static readonly Regex DecryptingName = new Regex(@"^\..+\.[0-9a-f]{8}\.t7drop-part$");
         static readonly byte[] Entropy = Encoding.UTF8.GetBytes("t7drop pairing v1");
 
         public readonly string Home, OutboxDir, IncomingDir;
-        readonly string pairingPath, devicesPath, receivedPath, historyPath;
+        readonly string pairingPath, devicesPath, receivedPath, refusedPath, historyPath;
         readonly object fileLock = new object();
 
         /// <summary>Raised on any thread after the outbox or the history changed.</summary>
@@ -227,6 +232,7 @@ namespace T7Drop
             pairingPath = Path.Combine(home, "pairing.dat");
             devicesPath = Path.Combine(home, "devices.json");
             receivedPath = Path.Combine(home, "received.json");
+            refusedPath = Path.Combine(home, "refused.json");
             historyPath = Path.Combine(home, "history.json");
             Directory.CreateDirectory(home);
         }
@@ -268,6 +274,7 @@ namespace T7Drop
         {
             File.Delete(pairingPath);
             Files.TryDelete(devicesPath);
+            Files.TryDelete(refusedPath);  // refused under the old key; a new one may read them
             Files.TryDeleteFolder(OutboxDir);
             Files.TryDeleteFolder(IncomingDir);
             Touch();
@@ -383,29 +390,75 @@ namespace T7Drop
                         Files.TryDelete(file);
         }
 
-        // Received
+        /// <summary>
+        /// Deletes the partial downloads of items no longer waiting (cancelled, expired, or lost in
+        /// a server restart, after which they may come again: so only once nothing has written
+        /// them for a day), and the hidden .&lt;name&gt;.&lt;id&gt;.t7drop-part files that a stopped
+        /// decryption left in the download folder.
+        /// </summary>
+        public void DropStaleParts(ICollection<string> waiting, string downloadFolder)
+        {
+            DateTime cutoff = DateTime.UtcNow - StalePart;
+            if (Directory.Exists(IncomingDir))
+                foreach (string file in Directory.GetFiles(IncomingDir))
+                {
+                    string name = Path.GetFileName(file);
+                    if (name.EndsWith(".part") && waiting.Contains(name.Substring(0, name.Length - ".part".Length)))
+                        continue;
+                    if (File.GetLastWriteTimeUtc(file) < cutoff)
+                        Files.TryDelete(file);
+                }
+            if (downloadFolder != null && Directory.Exists(downloadFolder))
+                foreach (string file in Directory.GetFiles(downloadFolder, "*.t7drop-part"))
+                    if (DecryptingName.IsMatch(Path.GetFileName(file)) && File.GetLastWriteTimeUtc(file) < cutoff)
+                        Files.TryDelete(file);
+        }
+
+        // Received and refused
 
         public bool WasReceived(string id)
         {
-            lock (fileLock)
-            {
-                Dictionary<string, object> received = Json.ReadFile(receivedPath);
-                return received != null && received.ContainsKey(id);
-            }
+            return Contains(receivedPath, id);
         }
 
         public void MarkReceived(string id)
         {
+            Mark(receivedPath, id, KeepReceivedMs);
+        }
+
+        /// <summary>Whether the item was refused here: another group's key, another device's, or damaged.</summary>
+        public bool WasRefused(string id)
+        {
+            return Contains(refusedPath, id);
+        }
+
+        public void MarkRefused(string id)
+        {
+            Mark(refusedPath, id, KeepRefusedMs);
+        }
+
+        bool Contains(string path, string id)
+        {
+            lock (fileLock)
+            {
+                Dictionary<string, object> ids = Json.ReadFile(path);
+                return ids != null && ids.ContainsKey(id);
+            }
+        }
+
+        /// <summary>Adds an id with the time now to path, and drops the ids older than keepMs.</summary>
+        void Mark(string path, string id, long keepMs)
+        {
             lock (fileLock)
             {
                 long now = Clock.NowMs;
-                Dictionary<string, object> old = Json.ReadFile(receivedPath) ?? new Dictionary<string, object>();
-                var received = new Dictionary<string, object>();
+                Dictionary<string, object> old = Json.ReadFile(path) ?? new Dictionary<string, object>();
+                var ids = new Dictionary<string, object>();
                 foreach (KeyValuePair<string, object> entry in old)
-                    if (now - Json.Long(old, entry.Key, 0) < KeepReceivedMs)
-                        received[entry.Key] = entry.Value;
-                received[id] = now;
-                Json.WriteFile(receivedPath, received);
+                    if (now - Json.Long(old, entry.Key, 0) < keepMs)
+                        ids[entry.Key] = entry.Value;
+                ids[id] = now;
+                Json.WriteFile(path, ids);
             }
         }
 

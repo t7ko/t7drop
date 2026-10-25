@@ -126,6 +126,14 @@ and retry; they never drop items or their pairing because of it.
   upload again, with the same id, every item that is not delivered.
 - Receivers remember the ids they saved (30 days). An item already saved is only
   acknowledged again, never saved twice.
+- They also remember the ids they refused (another group's key, another device's, damaged)
+  for 8 days, a day longer than the server keeps an item, so a refused item is never
+  downloaded again, not even after the app restarts (M5).
+- What is left over goes by itself (M5): a partial download of an item no longer waiting
+  (cancelled, expired, or lost in a server restart, after which it may come again) once
+  nothing has written it for a day, a temporary file of a decryption that never finished
+  likewise (Windows and the CLI; Android itself drops a pending Downloads entry after a
+  week), and a delivered item 30 days after its delivery.
 - Nothing appears in a target folder until it is complete and verified.
 - Clients retry with exponential backoff and jitter, from 1 second to at most 5 minutes.
   A long poll times out on the client after 70 seconds.

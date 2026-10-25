@@ -57,7 +57,8 @@ namespace T7Drop
         public readonly Config Config;
         readonly Api api;
         readonly Func<string> receiveFolder;
-        readonly HashSet<string> refused = new HashSet<string>();  // items that do not decrypt: not downloaded again
+        static readonly TimeSpan SweepEvery = TimeSpan.FromHours(1);
+        DateTime swept = DateTime.MinValue;  // the last Store.DropStaleParts
         string instance;
         long version = -1;
         bool interrupted;  // an upload met a changed server: sync again without a long poll
@@ -382,8 +383,14 @@ namespace T7Drop
             instance = newInstance;
             version = Json.Long(snapshot, "version", -1);
             ApplyOutbox(Json.Arr(snapshot, "outbox"));
-            foreach (Dictionary<string, object> entry in Json.Arr(snapshot, "inbox").OfType<Dictionary<string, object>>())
+            List<Dictionary<string, object>> inbox = Json.Arr(snapshot, "inbox").OfType<Dictionary<string, object>>().ToList();
+            foreach (Dictionary<string, object> entry in inbox)
                 Receive(entry, round);
+            if (DateTime.UtcNow - swept > SweepEvery)  // the download folder may be big: not at every sync
+            {
+                swept = DateTime.UtcNow;
+                store.DropStaleParts(new HashSet<string>(inbox.Select(e => Json.Str(e, "id")).Where(id => id != null)), receiveFolder());
+            }
         }
 
         void ApplyOutbox(object[] entries)
@@ -411,7 +418,7 @@ namespace T7Drop
         void Receive(Dictionary<string, object> entry, CancellationToken cancel)
         {
             string id = Json.Str(entry, "id");
-            if (!Protocol.IsItemId(id) || refused.Contains(id))
+            if (!Protocol.IsItemId(id) || store.WasRefused(id))
                 return;
             if (store.WasReceived(id))
             {
@@ -466,7 +473,7 @@ namespace T7Drop
 
         void Refuse(string id, string why)
         {
-            refused.Add(id);
+            store.MarkRefused(id);  // kept for 8 days: not downloaded again after a restart either
             Log.Write("not saved: item " + id + " " + why);
         }
 

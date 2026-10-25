@@ -6,17 +6,24 @@
                    item is delivered)
   incoming/        downloads in progress
   received.json    ids of the items saved, for 30 days, so that none is saved twice
+  refused.json     ids of the items refused (not this group's key, not for this device, or
+                   damaged), for 8 days: the server keeps an item 7, and it is not looked
+                   at again in the meantime
   texts.txt        texts received
 """
 
 import json
 import os
+import re
 import shutil
 import time
 
 from .pairing import from_b64url
 
 KEEP_RECEIVED_SECONDS = 30 * 86400
+KEEP_REFUSED_SECONDS = 8 * 86400
+STALE_PART_SECONDS = 86400  # a partial download of an item no longer waiting, untouched this long
+DECRYPTING_NAME = re.compile(r"^\..+\.[0-9a-f]{8}\.t7drop-part$")  # agent.Agent._save_file's temporary file
 
 
 def default_home():
@@ -88,6 +95,7 @@ class Profile:
         self.outbox_dir = os.path.join(home, "outbox")
         self.incoming_dir = os.path.join(home, "incoming")
         self.received_path = os.path.join(home, "received.json")
+        self.refused_path = os.path.join(home, "refused.json")
         self.texts_path = os.path.join(home, "texts.txt")
         self.config = read_json(self.config_path, None)
 
@@ -129,6 +137,31 @@ class Profile:
         received = {k: t for k, t in self.received().items() if now - t < KEEP_RECEIVED_SECONDS}
         received[item_id] = now
         write_json(self.received_path, received)
+
+    def refused(self):
+        return read_json(self.refused_path, {})
+
+    def mark_refused(self, item_id, now):
+        refused = {k: t for k, t in self.refused().items() if now - t < KEEP_REFUSED_SECONDS}
+        refused[item_id] = now
+        write_json(self.refused_path, refused)
+
+    def drop_stale_parts(self, waiting, now, download_dir=None):
+        """Deletes the partial downloads of items that are no longer waiting (cancelled,
+        expired, or lost in a server restart: then they may come again, so not at once), and
+        the .<name>.<id>.t7drop-part files a stopped decryption left in download_dir."""
+        if os.path.isdir(self.incoming_dir):
+            for name in os.listdir(self.incoming_dir):
+                path = os.path.join(self.incoming_dir, name)
+                if name.endswith(".part") and name[:-len(".part")] in waiting:
+                    continue
+                if now - os.path.getmtime(path) > STALE_PART_SECONDS:
+                    os.remove(path)
+        if download_dir and os.path.isdir(download_dir):
+            for name in os.listdir(download_dir):
+                path = os.path.join(download_dir, name)
+                if DECRYPTING_NAME.match(name) and now - os.path.getmtime(path) > STALE_PART_SECONDS:
+                    os.remove(path)
 
     def add_text(self, sender, text, now):
         os.makedirs(self.home, exist_ok=True)

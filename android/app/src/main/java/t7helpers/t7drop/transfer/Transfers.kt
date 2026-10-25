@@ -29,7 +29,6 @@ import java.security.DigestOutputStream
 import java.security.MessageDigest
 import java.util.Base64
 import java.util.UUID
-import java.util.concurrent.ConcurrentHashMap
 
 class TooLargeException(message: String) : IOException(message)
 
@@ -84,6 +83,7 @@ class Transfers(
     /** Sends what is queued and receives what is waiting; throws TransientException to retry later. */
     fun runOnce() {
         store.dropBrokenOutFolders(System.currentTimeMillis())
+        store.dropOldDeliveries(System.currentTimeMillis())
         sendPending()
         sync()
         sendPending()
@@ -174,6 +174,7 @@ class Transfers(
         applyOutbox(snapshot.getJSONArray("outbox"))
         val inbox = snapshot.getJSONArray("inbox")
         for (i in 0 until inbox.length()) receive(inbox.getJSONObject(i))
+        store.dropStaleParts((0 until inbox.length()).map { inbox.getJSONObject(it).getString("id") }.toSet(), System.currentTimeMillis())
     }
 
     private fun applyOutbox(entries: JSONArray) {
@@ -192,7 +193,7 @@ class Transfers(
 
     private fun receive(entry: JSONObject) {
         val id = entry.getString("id")
-        if (!Protocol.isItemId(id) || id in refused) return
+        if (!Protocol.isItemId(id) || store.wasRefused(id)) return
         if (store.wasReceived(id)) {
             ack(id)
             return
@@ -200,11 +201,11 @@ class Transfers(
         val meta = try {
             ItemCrypto.openMeta(config.key, id, Base64.getDecoder().decode(entry.getString("meta")))
         } catch (e: Exception) {
-            refused.add(id) // another key: not ours to read
+            store.markRefused(id, System.currentTimeMillis()) // another key: not ours to read
             return
         }
         if (meta.optString("to") != config.deviceId) {
-            refused.add(id)
+            store.markRefused(id, System.currentTimeMillis())
             return
         }
         if (entry.getLong("size") > 1_000_000) beforeBigTransfer()
@@ -230,7 +231,7 @@ class Transfers(
                 Received(id, "file", name, mime, size, null, uri.toString(), from, System.currentTimeMillis())
             }
         } catch (e: DecryptException) {
-            refused.add(id)
+            store.markRefused(id, System.currentTimeMillis()) // kept: the process restarts often, the item stays 7 days
             return
         } finally {
             part.delete()
@@ -326,9 +327,6 @@ class Transfers(
         private const val REPORT_BYTES = 512 * 1024
 
         private fun chunkLength(size: Long, n: Int): Long = minOf(Protocol.CHUNK_SIZE.toLong(), size - n.toLong() * Protocol.CHUNK_SIZE)
-
-        /** Items that do not decrypt with our key: not downloaded again while the app runs. */
-        private val refused: MutableSet<String> = ConcurrentHashMap.newKeySet()
 
         private fun hex(bytes: ByteArray) = bytes.joinToString("") { "%02x".format(it) }
 

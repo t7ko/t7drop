@@ -119,6 +119,9 @@ class Store private constructor(context: Context) {
     private val devicesFile = File(dir, "devices.json")
     private val historyFile = File(dir, "history.json")
     private val receivedFile = File(dir, "received.json")
+
+    /** Ids of items refused here (another group's key, another device's, damaged), for 8 days. */
+    private val refusedFile = File(dir, "refused.json")
     private val lock = Any()
 
     /** Raised on every change, so that the screens update. */
@@ -154,7 +157,7 @@ class Store private constructor(context: Context) {
     /** Unpairs: forgets the pairing, the queue and the lists. Saved files stay in Downloads. */
     fun forget() {
         synchronized(lock) {
-            listOf(configFile, devicesFile, historyFile, receivedFile).forEach { it.delete() }
+            listOf(configFile, devicesFile, historyFile, receivedFile, refusedFile).forEach { it.delete() }
             outboxDir.deleteRecursively()
             incomingDir.deleteRecursively()
             config = null
@@ -184,6 +187,24 @@ class Store private constructor(context: Context) {
         (outboxDir.listFiles() ?: emptyArray())
             .filter { !File(it, "item.json").exists() && now - it.lastModified() > 3_600_000 }
             .forEach { it.deleteRecursively() }
+    }
+
+    /** Delivered items 30 days after their delivery (the last write of item.json), as on Windows. */
+    fun dropOldDeliveries(now: Long) {
+        val gone = outbox().filter { it.state == OutState.DELIVERED && now - File(it.folder, "item.json").lastModified() > KEEP_DELIVERED_MILLIS }
+        gone.forEach { it.folder.deleteRecursively() }
+        if (gone.isNotEmpty()) touch()
+    }
+
+    /**
+     * Partial downloads of items no longer [waiting]: cancelled, expired, or lost in a server
+     * restart, after which they may come again; so only once nothing has written them for a day.
+     */
+    fun dropStaleParts(waiting: Set<String>, now: Long) {
+        (incomingDir.listFiles() ?: emptyArray())
+            .filter { !(it.name.endsWith(".part") && it.name.removeSuffix(".part") in waiting) }
+            .filter { now - it.lastModified() > STALE_PART_MILLIS }
+            .forEach { it.delete() }
     }
 
     fun remove(item: OutItem) {
@@ -218,6 +239,18 @@ class Store private constructor(context: Context) {
 
     fun wasReceived(id: String): Boolean = synchronized(lock) { readObject(receivedFile).has(id) }
 
+    fun wasRefused(id: String): Boolean = synchronized(lock) { readObject(refusedFile).has(id) }
+
+    /** Kept for 8 days, one more than the server keeps an item: not looked at again in a later run. */
+    fun markRefused(id: String, now: Long) {
+        synchronized(lock) {
+            val refused = readObject(refusedFile)
+            refused.keys().asSequence().toList().filter { now - refused.getLong(it) > KEEP_REFUSED_MILLIS }.forEach { refused.remove(it) }
+            refused.put(id, now)
+            writeAtomically(refusedFile, refused.toString().toByteArray())
+        }
+    }
+
     private fun readArray(file: File): List<JSONObject> = try {
         val array = JSONArray(file.readText())
         (0 until array.length()).map { array.getJSONObject(it) }
@@ -234,6 +267,9 @@ class Store private constructor(context: Context) {
     companion object {
         private const val MAX_HISTORY = 300
         private const val KEEP_RECEIVED_MILLIS = 30L * 24 * 3600 * 1000
+        private const val KEEP_REFUSED_MILLIS = 8L * 24 * 3600 * 1000
+        private const val KEEP_DELIVERED_MILLIS = 30L * 24 * 3600 * 1000
+        private const val STALE_PART_MILLIS = 24L * 3600 * 1000
 
         @Volatile
         private var instance: Store? = null

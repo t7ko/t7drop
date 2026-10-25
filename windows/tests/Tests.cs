@@ -343,6 +343,29 @@ namespace T7Drop.Tests
             store.MarkReceived("x1");
             store.MarkReceived("x2");
             Equal(true, store.WasReceived("x1") && store.WasReceived("x2"), "received ids are kept");
+            Equal(false, store.WasRefused("y1"), "nothing refused yet");
+            store.MarkRefused("y1");
+            Equal(true, new Store(store.Home).WasRefused("y1") && !store.WasRefused("x1"), "a refusal is kept on disk");
+
+            Directory.CreateDirectory(store.IncomingDir);
+            string old = Path.Combine(store.IncomingDir, "11111111-1111-4111-8111-111111111111.part");
+            string recent = Path.Combine(store.IncomingDir, "22222222-2222-4222-8222-222222222222.part");
+            string waiting = Path.Combine(store.IncomingDir, "33333333-3333-4333-8333-333333333333.part");
+            string downloads = Path.Combine(scratch, "downloads-stale");
+            Directory.CreateDirectory(downloads);
+            string leftover = Path.Combine(downloads, ".photo.jpg.11111111.t7drop-part");
+            string notOurs = Path.Combine(downloads, "notes.t7drop-part");
+            string decrypting = Path.Combine(downloads, ".a.txt.22222222.t7drop-part");
+            foreach (string path in new[] { old, recent, waiting, leftover, notOurs, decrypting })
+                File.WriteAllText(path, "x");
+            foreach (string path in new[] { old, waiting, leftover, notOurs })
+                File.SetLastWriteTimeUtc(path, DateTime.UtcNow.AddDays(-2));
+            File.SetAttributes(leftover, FileAttributes.Hidden);
+            store.DropStaleParts(new HashSet<string> { "33333333-3333-4333-8333-333333333333" }, downloads);
+            Equal("False True True", string.Join(" ", new[] { old, recent, waiting }.Select(File.Exists)),
+                "an old part of an item gone goes; a recent one (a server restart?) and one still waiting stay");
+            Equal("False True True", string.Join(" ", new[] { leftover, notOurs, decrypting }.Select(File.Exists)),
+                "an old hidden decryption is deleted; a name not ours, or a recent one, stays");
             int changes = 0;
             store.Changed += () => changes++;
             store.AddReceived(new Received { Id = "x1", Kind = "text", Text = "hello", From = "phone", Time = 1 });
@@ -354,6 +377,7 @@ namespace T7Drop.Tests
             Equal(3, changes, "each change is announced");
             store.Forget();
             Equal(null, store.LoadConfig(), "unpaired");
+            Equal(false, store.WasRefused("y1"), "unpairing forgets the refusals: a new key may read those items");
         }
 
         static Dictionary<string, object> Device(string id, string name, long created, bool canInvite)
