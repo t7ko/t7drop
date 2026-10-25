@@ -5,6 +5,7 @@ import os
 import sys
 import threading
 import time
+import traceback
 from http.server import ThreadingHTTPServer
 
 from .api import App, make_handler
@@ -48,6 +49,7 @@ class Server:
         self.config = config
         self.registry = Registry(config.data_dir, now)
         self.store = ChunkStore(os.path.join(config.data_dir, "blobs"))
+        self.store.self_test()
         self.hub = Hub(config, self.store, now)
         self.app = App(config, self.registry, self.hub, log)
         self.httpd = _HTTPServer((config.host, config.port), make_handler(self.app))
@@ -74,16 +76,25 @@ class Server:
         self.httpd.server_close()
 
     def _janitor(self):
-        """Drops expired items and writes status.json for the admin command."""
         written = None
         while True:
-            self.hub.expire()
-            status = self.hub.status()
-            if status != written:
-                tmp = self.status_path + ".tmp"
-                with open(tmp, "w", encoding="utf-8") as f:
-                    json.dump(status, f)
-                os.replace(tmp, self.status_path)
-                written = status
+            try:
+                written = self.tidy(written)
+            except Exception:
+                self.app.log.write("janitor: " + traceback.format_exc())
+                self.app.log.flush()
             if self._stop.wait(JANITOR_SECONDS):
                 return
+
+    def tidy(self, written=None):
+        """Drops expired items and those of revoked devices, and writes status.json for the
+        admin command if it changed; returns the status."""
+        self.hub.expire()
+        self.hub.drop_unpaired({d["id"] for d in self.registry.devices()})
+        status = self.hub.status()
+        if status != written:
+            tmp = self.status_path + ".tmp"
+            with open(tmp, "w", encoding="utf-8") as f:
+                json.dump(status, f)
+            os.replace(tmp, self.status_path)
+        return status

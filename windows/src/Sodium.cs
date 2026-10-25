@@ -104,6 +104,36 @@ namespace T7Drop
             return buffer;
         }
 
+        public const int SignSeedBytes = 32, SignPublicKeyBytes = 32, SignSecretKeyBytes = 64, SignatureBytes = 64;
+
+        /// <summary>Whether signature is the Ed25519 signature of message under publicKey.</summary>
+        public static bool VerifyDetached(byte[] signature, byte[] message, byte[] publicKey)
+        {
+            if (signature == null || signature.Length != SignatureBytes || publicKey == null || publicKey.Length != SignPublicKeyBytes)
+                return false;
+            return crypto_sign_verify_detached(signature, message, (ulong)message.Length, publicKey) == 0;
+        }
+
+        /// <summary>The Ed25519 key pair of a 32-byte seed; the secret key is 64 bytes.</summary>
+        public static void SeedKeyPair(byte[] seed, out byte[] publicKey, out byte[] secretKey)
+        {
+            if (seed == null || seed.Length != SignSeedBytes)
+                throw new ArgumentException("A signing seed has " + SignSeedBytes + " bytes.");
+            publicKey = new byte[SignPublicKeyBytes];
+            secretKey = new byte[SignSecretKeyBytes];
+            if (crypto_sign_seed_keypair(publicKey, secretKey, seed) != 0)
+                throw new InvalidOperationException("libsodium refused the signing seed.");
+        }
+
+        public static byte[] SignDetached(byte[] message, byte[] secretKey)
+        {
+            var signature = new byte[SignatureBytes];
+            ulong length;
+            if (crypto_sign_detached(signature, out length, message, (ulong)message.Length, secretKey) != 0 || length != SignatureBytes)
+                throw new InvalidOperationException("libsodium refused to sign.");
+            return signature;
+        }
+
         [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
         static extern IntPtr LoadLibrary(string path);
 
@@ -147,6 +177,15 @@ namespace T7Drop
         [DllImport(Dll, CallingConvention = CallingConvention.Cdecl)]
         public static extern int crypto_secretstream_xchacha20poly1305_pull(byte[] state, byte[] m, out ulong mlen,
             out byte tag, byte[] c, ulong clen, byte[] ad, ulong adlen);
+
+        [DllImport(Dll, CallingConvention = CallingConvention.Cdecl)]
+        static extern int crypto_sign_verify_detached(byte[] sig, byte[] m, ulong mlen, byte[] pk);
+
+        [DllImport(Dll, CallingConvention = CallingConvention.Cdecl)]
+        static extern int crypto_sign_detached(byte[] sig, out ulong siglen, byte[] m, ulong mlen, byte[] sk);
+
+        [DllImport(Dll, CallingConvention = CallingConvention.Cdecl)]
+        static extern int crypto_sign_seed_keypair(byte[] pk, byte[] sk, byte[] seed);
     }
 
     static class Hex

@@ -38,6 +38,13 @@ object Pairing {
         return Invitation(url, code, key)
     }
 
+    /** The host an invitation pairs with, shown before pairing (a link can come from anyone); null if [text] is none. */
+    fun serverHost(text: String): String? = try {
+        java.net.URI(parse(text).url).host
+    } catch (e: Exception) {
+        null
+    }
+
     fun make(url: String, code: String, key: ByteArray): String =
         PREFIX + listOf("v" to "1", "u" to url, "c" to code, "k" to b64url(key))
             .joinToString("&") { (name, value) -> name + "=" + URLEncoder.encode(value, "UTF-8") }

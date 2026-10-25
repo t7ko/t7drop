@@ -66,6 +66,9 @@ IPAddressAllow=localhost
 IPAddressDeny=any
 ```
 
+- M5 added `SystemCallFilter=@system-service`, `SystemCallErrorNumber=EPERM`,
+  `ProtectProc=invisible`, `ProcSubset=pid` and `RemoveIPC=yes` (`docs/security.md`, D1);
+  `check.sh` prints `systemd-analyze security`'s rating.
 - It listens on 127.0.0.1:8765 only, and cannot open connections to anywhere else.
 - `-E -s`: Python ignores `PYTHON*` environment variables and the user's site packages;
   the script's own folder, owned by root, is the only addition to the import path.

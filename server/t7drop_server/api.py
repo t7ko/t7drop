@@ -1,8 +1,9 @@
 """The HTTP side of the server: routes, authentication, request bodies, responses.
 
 A request without a valid token gets the same 404 page that nginx gives for an unknown
-path, without t7drop's headers, so the service does not show itself. Every other
-response carries X-T7drop-Instance.
+path, without t7drop's headers, so the service does not show itself; so does any refusal
+of POST /pair, the one route without a token. Every other response carries
+X-T7drop-Instance.
 """
 
 import base64
@@ -28,6 +29,8 @@ JSON_LIMIT = 16 * 1024
 CREATE_LIMIT = 128 * 1024
 MAX_INVITES_PER_DEVICE = 3
 INVITE_SECONDS = 600
+TRANSFER_ROUTES = ("put_chunk", "get_chunk")
+TRANSFER_WAIT = 30  # seconds a chunk transfer waits for a free slot before it gets 503
 
 _ID = r"(?P<id>[0-9a-f-]{36})"
 _N = r"(?P<n>[0-9]{1,6})"
@@ -64,6 +67,9 @@ class App:
         self.log = log
         self._failures = collections.deque()
         self._failures_lock = threading.Lock()
+        # Each chunk in flight holds up to three copies of 4 MiB: this keeps the process
+        # well under its MemoryMax however many requests come in.
+        self.transfers = threading.BoundedSemaphore(config.max_transfers)
 
     def pairing_allowed(self):
         with self._failures_lock:
@@ -91,7 +97,7 @@ def _int(text):
 def _json(body):
     try:
         data = json.loads(body.decode("utf-8")) if body else {}
-    except (ValueError, UnicodeDecodeError):
+    except (ValueError, UnicodeDecodeError, RecursionError):
         raise ApiError(400, "bad_json")
     if not isinstance(data, dict):
         raise ApiError(400, "bad_json")
@@ -150,15 +156,28 @@ def make_handler(app):
                         self.device = app.registry.authenticate(self._credentials("bearer"))
                         if self.device is None and not (name == "ping" and self._check_code()):
                             raise NotFound()
-                    body = self._body(limit)
-                    status, payload = getattr(self, "r_" + name)(params, _query(query), body)
-                    self._send(status, payload)
+                    slot = name in TRANSFER_ROUTES
+                    if slot and not app.transfers.acquire(timeout=TRANSFER_WAIT):
+                        slot = False
+                        self.close_connection = True  # the body was not read
+                        raise ApiError(503, "busy")
+                    try:
+                        body = self._body(limit)
+                        status, payload = getattr(self, "r_" + name)(params, _query(query), body)
+                        self._send(status, payload)
+                    finally:
+                        if slot:
+                            app.transfers.release()
                 except NotFound:
                     status = 404
                     self._send_not_found()
                 except ApiError as e:
                     status = e.status
-                    self._send(e.status, dict(e.details, error=e.code))
+                    if self.device is None and name == "pair":
+                        status = 404
+                        self._send_not_found()
+                    else:
+                        self._send(e.status, dict(e.details, error=e.code))
                 except (ConnectionError, TimeoutError):
                     status = 499
                     self.close_connection = True
@@ -190,8 +209,14 @@ def make_handler(app):
             return value.strip() if kind.lower() == scheme else None
 
         def _check_code(self):
+            """A one-time check code; wrong ones count against pairing, as wrong pairing codes do."""
             code = self._credentials("check")
-            return bool(code) and app.registry.redeem_invite(code, "check") is not None
+            if not code or not app.pairing_allowed():
+                return False
+            if app.registry.redeem_invite(code, "check") is None:
+                app.pairing_failed()
+                return False
+            return True
 
         def _body(self, limit):
             if self.headers.get("Transfer-Encoding"):

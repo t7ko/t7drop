@@ -44,6 +44,7 @@ class Api(url: String, private val token: String?) {
             connection.connectTimeout = 20_000
             connection.readTimeout = timeoutMillis
             connection.useCaches = false
+            connection.instanceFollowRedirects = false // t7drop never redirects; the token stays with its server
             if (auth && token != null) connection.setRequestProperty("Authorization", "Bearer $token")
             if (body != null) {
                 connection.doOutput = true

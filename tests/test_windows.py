@@ -214,6 +214,8 @@ def test_texts_and_files_both_ways(paired, tmp_path):
     assert windows.files() == ["photo.jpg"]
     with open(saved, "rb") as f:
         assert f.read() == data
+    with open(saved + ":Zone.Identifier", encoding="ascii") as f:
+        assert "ZoneId=3" in f.read(), "marked as from the internet (docs/security.md)"
     assert phone.receive() == 0
     assert phone.states() == ["delivered", "delivered"]
 
@@ -286,7 +288,10 @@ def test_an_upload_cut_by_a_server_restart_is_sent_again(paired, start_server, s
     assert windows.finish() == 0, "\n".join(windows.output)
     assert phone.read("restart.bin") == data
     assert second.hub.status()["items"] == {"delivered": 1}
-    assert any("not reachable" in line for line in windows.output), "it retried after the restart"
+    # It noticed the restart one of two ways, as timing has it: the connection failed, or
+    # .NET resent the cut request on a new connection and the new server did not know the item.
+    assert any("not reachable" in line or "changed on the server" in line for line in windows.output), \
+        "it noticed the restart"
 
 
 def test_a_download_resumes_and_no_partial_file_shows(paired, server, tmp_path):

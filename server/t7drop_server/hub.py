@@ -221,6 +221,13 @@ class Hub:
         with self.cond:
             self._expire()
 
+    def drop_unpaired(self, paired):
+        """Drops the items from and to devices that are no longer in `paired` (revoked)."""
+        with self.cond:
+            for item in list(self.items.values()):
+                if item.sender not in paired or item.recipient not in paired:
+                    self._drop(item)
+
     def _expire(self):
         c, now = self.config, self.now()
         for item in list(self.items.values()):

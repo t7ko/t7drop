@@ -33,6 +33,7 @@ fi
 grep -E '^(anon|file) ' /sys/fs/cgroup/system.slice/t7drop.service/memory.stat 2>/dev/null \
     | awk '{printf "cgroup %s: %d MB\n", $1, $2 / 1048576}'
 journalctl -u t7drop -n 10 --no-pager -o short-iso
+echo "sandbox: $(systemd-analyze security t7drop --no-pager 2>/dev/null | tail -n 1)"
 
 say "Devices and queue"
 t7drop-admin devices

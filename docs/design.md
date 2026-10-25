@@ -75,7 +75,8 @@ lives only in the server's memory.
   Encrypt rate limits all of that domain's users share. The prefix is only unlisted; the
   tokens are the security. nginx gets one isolated include file, checked with `nginx -t`
   and applied with a reload (`docs/deployment.md`).
-- Requests without a valid token get the same 404 as any unknown path of the site.
+- Requests without a valid token get the same 404 as any unknown path of the site; so does
+  any refused pairing request. The threat model and the M5 review: `docs/security.md`.
 - Admin command on the VPS (`server/admin.py`, run as the service's user): create the
   first pairing code, list and revoke devices, show the queue, make a one-time code that
   checks the public URL. It works on the files in the data folder, which the server
@@ -88,7 +89,8 @@ lives only in the server's memory.
   item is created, so an upload is never refused half-way; meta up to 4 KiB; chunks of
   4 MiB; unfinished uploads are dropped after 24 hours and undelivered items after 7 days;
   a delivered item leaves a small record without data for 7 days, so its sender can see
-  that it was delivered.
+  that it was delivered. At most 6 chunk transfers at once, which keeps memory low; others
+  wait up to 30 s, then get 503 and retry.
 - Logs: method, route, status, sizes, device name. Never tokens, keys, meta, file names or
   text.
 
@@ -137,9 +139,10 @@ and retry; they never drop items or their pairing because of it.
    with the server URL, the code and K. The new device scans it and pairs. The QR code is
    the only way K travels. Only devices paired with a code from `t7drop-admin` may ask
    for codes (the user's rule): a device invited by another device may not invite.
-3. Wrong codes: at most 10 an hour; then pairing is locked for an hour.
-4. A lost or stolen device is revoked on the VPS. The remaining devices should then pair
-   again with a new K.
+3. Wrong codes: at most 10 an hour (pairing and check codes together); then pairing is
+   locked for an hour.
+4. A lost or stolen device is revoked on the VPS: its token stops at once, and its items
+   leave the server within 30 s. The remaining devices should then pair again with a new K.
 
 Secrets on the devices: Windows protects the token and K with DPAPI (current user);
 Android wraps them with an Android Keystore key; the CLI keeps them in a file in the
@@ -150,6 +153,7 @@ user's profile (it is a test tool).
 - A share target for `ACTION_SEND` and `ACTION_SEND_MULTIPLE` (any type). It reads and
   encrypts the shared content at once, because the permission to read a shared
   `content://` URI ends with the activity, queues one WorkManager job per item and closes.
+  It takes only other apps' `content://` URIs, never `file://` or t7drop's own (M5).
 - Upload and download workers: network constraint, exponential backoff, and a foreground
   notification (type `dataSync`) only while a transfer runs. They survive the app being
   swiped away and the phone restarting. No permanent service.
@@ -194,6 +198,9 @@ user's profile (it is a test tool).
 - `libsodium.dll` (the official build) is embedded in the exe, written out at the first
   start and called through P/Invoke. A QR code encoder is ported into the source.
 - Token and K are protected with DPAPI.
+- From 0.3.0 on, the self-update takes only an exe signed with the release key: Ed25519,
+  `T7Drop.exe.sig` beside `T7Drop.exe` in the release; the public half is in `Updater.cs`.
+  Received files carry the Mark of the Web, as browser downloads do (M5, `docs/security.md`).
 - As built in M4: the CLI agent's logic (`Transfers`) runs on a thread of its own
   (`Worker`) that long-polls `/sync` while nothing else is to be done and retries with
   backoff. A new item, a retry or a cancel ends the long poll at once; waking from sleep
@@ -217,7 +224,8 @@ user's profile (it is a test tool).
 ## Releases
 
 - One repository and one version for the Android and Windows apps: GitHub release
-  `v<version>` carries `t7drop-<version>.apk` and `T7Drop.exe`. Obtainium takes the APK
+  `v<version>` carries `t7drop-<version>.apk`, `T7Drop.exe` and, from 0.3.0 on,
+  `T7Drop.exe.sig`. Obtainium takes the APK
   (an asset filter `\.apk$` if needed); the Windows updater takes `T7Drop.exe` from the
   latest release. Should the two ever need versions of their own: tags `android-v...` and
   `windows-v...`, filtered by regular expression in Obtainium and in the updater.

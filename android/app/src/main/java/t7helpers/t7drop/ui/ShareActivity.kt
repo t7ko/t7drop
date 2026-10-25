@@ -48,7 +48,7 @@ class ShareActivity : ComponentActivity() {
             finish()
             return
         }
-        val shared = Shared.fromIntent(intent)
+        val shared = Shared.fromIntent(intent, packageName)
         if (shared.isEmpty) {
             toast("There is nothing to send in what was shared.")
             finish()

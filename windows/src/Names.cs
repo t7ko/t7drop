@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 
@@ -19,7 +20,9 @@ namespace T7Drop
         {
             string result = (name ?? "").Replace('\\', '/');
             result = result.Substring(result.LastIndexOf('/') + 1);
-            result = new string(result.Select(c => Forbidden.IndexOf(c) >= 0 || c < ' ' ? '_' : c).ToArray());
+            // Invisible format characters, such as U+202E that shows "photo<U+202E>gpj.exe" as "photoexe.jpg".
+            result = new string(result.Where(c => char.GetUnicodeCategory(c) != UnicodeCategory.Format)
+                .Select(c => Forbidden.IndexOf(c) >= 0 || c < ' ' ? '_' : c).ToArray());
             result = result.Trim().TrimEnd('.', ' ');
             if (result.Length == 0)
                 result = "file";

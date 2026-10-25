@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Nothing of t7drop moves to another phone, neither by backup nor by a device-to-device
+     transfer (allowBackup="false" no longer stops the latter from Android 12 on): the pairing
+     is bound to this phone's Keystore, and the lists hold received texts. On a new phone,
+     pair again. Received files are in Downloads, outside the app's data. -->
+<data-extraction-rules>
+    <cloud-backup>
+        <exclude domain="root" path="." />
+        <exclude domain="file" path="." />
+        <exclude domain="database" path="." />
+        <exclude domain="sharedpref" path="." />
+        <exclude domain="external" path="." />
+        <exclude domain="device_root" path="." />
+    </cloud-backup>
+    <device-transfer>
+        <exclude domain="root" path="." />
+        <exclude domain="file" path="." />
+        <exclude domain="database" path="." />
+        <exclude domain="sharedpref" path="." />
+        <exclude domain="external" path="." />
+        <exclude domain="device_root" path="." />
+    </device-transfer>
+</data-extraction-rules>

@@ -16,8 +16,10 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import t7helpers.t7drop.Pairing
 
 @Composable
 fun PairScreen(
@@ -57,6 +59,11 @@ fun PairScreen(
                 minLines = 2,
                 modifier = Modifier.fillMaxWidth(),
             )
+            // A t7drop: link can come from any app or web page: say where it leads.
+            val server = remember(invitation) { Pairing.serverHost(invitation) }
+            if (server != null) {
+                Text("Server: $server. Pair only if it is your own t7drop server.", style = MaterialTheme.typography.bodyMedium)
+            }
             OutlinedButton(onClick = onPair, enabled = !busy && invitation.isNotBlank(), modifier = Modifier.fillMaxWidth()) {
                 Text("Pair")
             }

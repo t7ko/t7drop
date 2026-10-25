@@ -170,16 +170,25 @@ class Registry:
             return sum(1 for i in self._live_invites() if i["created_by"] == created_by)
 
     def redeem_invite(self, code, kind):
-        """Uses up a live code of this kind; returns its entry, or None."""
+        """Uses up a live code of this kind; returns its entry, or None.
+
+        The file is written only when a code is used up or has expired, so that wrong codes
+        (anyone may send them) cost no disk writes.
+        """
         code_hash = _hash(normalize_code(code))
         with self._changing():
-            invites = self._live_invites()
+            stored = _read_json(self.invites_path, {"invites": []})["invites"]
+            invites = self._live(stored)
             match = next((i for i in invites if i["code_sha256"] == code_hash and i["kind"] == kind), None)
             if match is not None:
                 invites.remove(match)
-            _write_json(self.invites_path, {"invites": invites})
+            if len(invites) != len(stored):
+                _write_json(self.invites_path, {"invites": invites})
         return match
 
     def _live_invites(self):
+        return self._live(_read_json(self.invites_path, {"invites": []})["invites"])
+
+    def _live(self, invites):
         now = self.now()
-        return [i for i in _read_json(self.invites_path, {"invites": []})["invites"] if i["expires"] > now]
+        return [i for i in invites if i["expires"] > now]

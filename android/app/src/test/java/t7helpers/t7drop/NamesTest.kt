@@ -16,6 +16,8 @@ class NamesTest {
         assertEquals("file", Names.safe(null))
         assertEquals(150, Names.safe("x".repeat(300) + ".jpg").length)
         assertEquals("\u0444\u043e\u0442\u043e.jpg", Names.safe("\u0444\u043e\u0442\u043e.jpg"))
+        assertEquals("photogpj.exe", Names.safe("photo\u202egpj.exe"))
+        assertEquals("note.txt", Names.safe("\u200bnote\ufeff.\u2066txt"))
     }
 
     @Test

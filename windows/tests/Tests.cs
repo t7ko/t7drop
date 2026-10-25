@@ -25,9 +25,12 @@ namespace T7Drop.Tests
             Console.OutputEncoding = new UTF8Encoding(false);
             if (args.Length > 0 && args[0] == "agent")
                 return Agent.Run(args.Skip(1).ToArray());
+            if (args.Length > 0 && (args[0] == "keygen" || args[0] == "sign"))
+                return Signing.Run(args);
             if (args.Length != 3 || args[0] != "test")
             {
-                Console.Error.WriteLine("Usage: Tests.exe test <built exe> <repository> | Tests.exe agent ...");
+                Console.Error.WriteLine("Usage: Tests.exe test <built exe> <repository> | Tests.exe agent ... | " +
+                    "Tests.exe keygen|sign ... (Signing.cs)");
                 return 2;
             }
             string builtExe = args[1], repository = args[2];
@@ -217,7 +220,8 @@ namespace T7Drop.Tests
                 { "photo.jpg", "photo.jpg" }, { "a/b\\c.txt", "c.txt" }, { "con.txt", "_con.txt" }, { "COM1", "_COM1" },
                 { "what?.txt", "what_.txt" }, { " spaced . ", "spaced" }, { "...", "file" }, { "", "file" },
                 { "tab\there", "tab_here" }, { "LPT9.tar.gz", "_LPT9.tar.gz" }, { "файл.txt", "файл.txt" },
-                { "a:b*c|d.png", "a_b_c_d.png" },
+                { "a:b*c|d.png", "a_b_c_d.png" }, { "photo\u202egpj.exe", "photogpj.exe" },
+                { "\u200bnote\ufeff.\u2066txt", "note.txt" },
             };
             foreach (KeyValuePair<string, string> c in cases)
                 Equal(c.Value, Names.Safe(c.Key), "safe name of '" + c.Key + "'");
@@ -230,6 +234,15 @@ namespace T7Drop.Tests
             File.WriteAllText(Path.Combine(folder, "a.txt"), "");
             File.WriteAllText(Path.Combine(folder, "a (1).txt"), "");
             Equal(Path.Combine(folder, "a (2).txt"), Names.UniquePath(folder, "a.txt"), "a taken name gets a number");
+            string marked = Path.Combine(folder, "a.txt");
+            Equal(null, Files.ReadZone(marked), "a file of this computer has no zone");
+            if (Files.MarkFromInternet(marked))  // %TEMP% is on NTFS here
+            {
+                File.Move(marked, marked + ".moved");
+                Equal(Files.InternetZone, Files.ReadZone(marked + ".moved"), "the mark of the web stays through a rename");
+            }
+            else
+                Fail("%TEMP% takes no alternate streams: the mark of the web is not tested");
             Equal("2.0 MB", Names.Size(2 * 1024 * 1024 + 100), "sizes");
             Equal("17 bytes", Names.Size(17), "small sizes");
         }
@@ -418,17 +431,35 @@ namespace T7Drop.Tests
             Equal("abcdef01", release.Sha256, "digest, lower case");
             Equal(null, Updater.Parse(@"{""tag_name"":""v0.3.0"",""assets"":[{""name"":""t7drop-0.3.0.apk"",""browser_download_url"":""u""}]}"),
                 "a release with only the APK");
+            Equal(null, release.SignatureUrl, "a release without T7Drop.exe.sig");
+            Release signed = Updater.Parse(json.Replace("]}", @",{""name"":""T7Drop.exe.sig"",""browser_download_url"":""https://github.com/d/T7Drop.exe.sig"",""size"":129}]}"));
+            Equal("https://github.com/d/T7Drop.exe.sig", signed.SignatureUrl, "the signature's URL");
 
+            // A test key in place of the release key, whose secret half is not here.
+            byte[] testPublic, testSecret;
+            Sodium.SeedKeyPair(Enumerable.Repeat((byte)7, Sodium.SignSeedBytes).ToArray(), out testPublic, out testSecret);
+            byte[] signature = Sodium.SignDetached(File.ReadAllBytes(builtExe), testSecret);
+            string testsExe = typeof(TestMain).Assembly.Location;
             var good = new Release { Version = Updater.CurrentVersion, Size = new FileInfo(builtExe).Length, Sha256 = FileSha256(builtExe) };
-            Throws(null, () => Updater.Verify(builtExe, good), "the built exe passes");
+            Throws(null, () => Updater.Verify(builtExe, good, signature, testPublic), "the built exe passes");
             Throws(typeof(InvalidDataException), () => Updater.Verify(builtExe,
-                new Release { Version = good.Version, Size = good.Size + 1 }), "a wrong size fails");
+                new Release { Version = good.Version, Size = good.Size + 1 }, signature, testPublic), "a wrong size fails");
             Throws(typeof(InvalidDataException), () => Updater.Verify(builtExe,
-                new Release { Version = good.Version, Sha256 = "00" }), "a wrong SHA-256 fails");
+                new Release { Version = good.Version, Sha256 = "00" }, signature, testPublic), "a wrong SHA-256 fails");
             Throws(typeof(InvalidDataException), () => Updater.Verify(builtExe,
-                new Release { Version = new Version(9, 9, 9, 0) }), "a wrong version fails");
-            Throws(typeof(InvalidDataException), () => Updater.Verify(typeof(TestMain).Assembly.Location,
-                new Release { Version = good.Version }), "another program fails");
+                new Release { Version = new Version(9, 9, 9, 0) }, signature, testPublic), "a wrong version fails");
+            Throws(typeof(InvalidDataException), () => Updater.Verify(testsExe, new Release { Version = good.Version },
+                Sodium.SignDetached(File.ReadAllBytes(testsExe), testSecret), testPublic), "another program fails");
+            byte[] damaged = (byte[])signature.Clone();
+            damaged[10] ^= 1;
+            Throws(typeof(InvalidDataException), () => Updater.Verify(builtExe, good, damaged, testPublic), "a damaged signature fails");
+            Throws(typeof(InvalidDataException), () => Updater.Verify(builtExe, good, null, testPublic), "no signature fails");
+            Throws(typeof(InvalidDataException), () => Updater.Verify(builtExe, good, signature),
+                "a signature by another key than the release key fails");
+            Equal(Hex.Of(signature), Hex.Of(Updater.ParseSignature(Hex.Of(signature).ToUpperInvariant() + "\r\n")), "a .sig file");
+            Equal(null, Updater.ParseSignature(Hex.Of(signature).Substring(2)), "a short .sig file");
+            Equal(null, Updater.ParseSignature(new string('z', 128)), "a .sig file that is not hex");
+            Equal(Sodium.SignPublicKeyBytes, Hex.Parse(Updater.ReleaseKeyHex).Length, "the release key is an Ed25519 public key");
 
             string folder = Path.Combine(scratch, "update");
             Directory.CreateDirectory(folder);

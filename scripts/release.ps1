@@ -13,8 +13,12 @@ https://github.com/t7ko/t7drop and takes the APK; the Windows app's updater take
 from the latest release. Each step is skipped when already done, so the script can be run
 again after a failure.
 
+T7Drop.exe is signed with the release key (windows/tests/Signing.cs; docs/security.md) into
+T7Drop.exe.sig, which goes up before the exe: from 0.3.0 on, the Windows app installs only a
+release whose exe that key signed.
+
 The token is read from the file that github.tokenFile in the git-ignored local.properties
-names. It is never printed.
+names, the release key from the file that windows.signKeyFile names. Neither is printed.
 #>
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
@@ -33,6 +37,17 @@ $version = $Matches[1]
 $tag = "v$version"
 $apkName = "t7drop-$version.apk"
 $exeName = 'T7Drop.exe'  # the name the Windows updater looks for (windows/src/Updater.cs)
+$sigName = "$exeName.sig"
+
+$properties = Join-Path $root 'local.properties'
+function Get-LocalPath([string] $name) {
+    $value = Get-Content $properties | Where-Object { $_ -match "^$([regex]::Escape($name))=(.*)$" } |
+        ForEach-Object { $Matches[1].Trim().Replace('\:', ':').Replace('\\', '\') } | Select-Object -First 1
+    if (-not $value) { throw "local.properties has no $name." }
+    $value
+}
+$signKeyFile = Get-LocalPath 'windows.signKeyFile'
+if (-not (Test-Path $signKeyFile)) { throw "The release key $signKeyFile is not there." }
 
 if ((Invoke-Git rev-parse --abbrev-ref HEAD) -ne 'main') { throw 'Release from main.' }
 if (Invoke-Git status --porcelain) { throw 'Commit your changes first: a release is built from a commit.' }
@@ -49,13 +64,14 @@ $apk = Join-Path $root "dist/$apkName"
 & (Join-Path $root 'windows/scripts/build.ps1')
 $exe = Join-Path $root "dist/$exeName"
 if ((Get-Item $exe).VersionInfo.FileVersion -ne "$version.0") { throw "$exe is not version $version." }
+# Tests.exe (windows/scripts/build.ps1 built it with the exe) refuses a key other than the one the updater trusts.
+& (Join-Path $root 'windows/obj/Tests.exe') sign $signKeyFile $exe
+if ($LASTEXITCODE) { throw "Signing $exe failed." }
+$sig = "$exe.sig"
 
 & (Join-Path $PSScriptRoot 'push.ps1') main $tag
 
-$properties = Join-Path $root 'local.properties'
-$tokenFile = Get-Content $properties | Where-Object { $_ -match '^github\.tokenFile=(.*)$' } |
-    ForEach-Object { $Matches[1].Trim().Replace('\:', ':') } | Select-Object -First 1
-$token = (Get-Content $tokenFile -TotalCount 1).Trim()
+$token = (Get-Content (Get-LocalPath 'github.tokenFile') -TotalCount 1).Trim()
 
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 $headers = @{
@@ -76,7 +92,9 @@ try {
 }
 
 $uploadUrl = $release.upload_url -replace '\{.*\}$', ''
-foreach ($asset in @(@($apkName, $apk, 'application/vnd.android.package-archive'), @($exeName, $exe, 'application/octet-stream'))) {
+# The signature before the exe: an updater that sees the exe finds its signature too.
+foreach ($asset in @(@($apkName, $apk, 'application/vnd.android.package-archive'), @($sigName, $sig, 'text/plain'),
+        @($exeName, $exe, 'application/octet-stream'))) {
     if ($release.assets | Where-Object { $_.name -eq $asset[0] }) {
         Write-Host "$($asset[0]) is already attached."
     } else {
@@ -84,4 +102,4 @@ foreach ($asset in @(@($apkName, $apk, 'application/vnd.android.package-archive'
             -ContentType $asset[2] -InFile $asset[1] | Out-Null
     }
 }
-Write-Host "Released $tag with $apkName and $exeName at $($release.html_url)"
+Write-Host "Released $tag with $apkName, $sigName and $exeName at $($release.html_url)"

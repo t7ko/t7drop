@@ -46,3 +46,17 @@ class ChunkStore:
 
     def delete(self, item_id):
         shutil.rmtree(self._folder(item_id), ignore_errors=True)
+
+    def self_test(self):
+        """Stores, reads and deletes one chunk: the server should not start when the
+        encryption or the folder fails (under a new sandbox setting, say)."""
+        data = os.urandom(1024 * 1024)
+        self.put(SELF_TEST_ID, 0, data)
+        try:
+            if self.get(SELF_TEST_ID, 0) != data:
+                raise RuntimeError("the chunk store's self-test read back other bytes")
+        finally:
+            self.delete(SELF_TEST_ID)
+
+
+SELF_TEST_ID = "00000000-0000-4000-8000-000000000000"  # no client makes it: random UUIDs only

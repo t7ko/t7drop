@@ -318,6 +318,7 @@ namespace T7Drop
                 if (ChangedUnderUs.Contains(e.Code))
                 {
                     interrupted = true;  // a server restart, or another upload of it: the next round
+                    Log.Write("the upload of " + item.Id + " changed on the server (" + e.Code + "); starting it again");
                     return;
                 }
                 Log.Write("refused " + item.Id + ": " + e.Code);
@@ -537,6 +538,10 @@ namespace T7Drop
                     dst.Flush(true);
                 }
                 File.SetAttributes(temp, FileAttributes.Normal);
+                // From another device, perhaps from the web before: marked as from the internet
+                // before it gets its name; the rename keeps the mark.
+                if (!Files.MarkFromInternet(temp))
+                    Log.Write("received " + id + " into a folder without alternate streams: not marked as from the internet");
                 string target = Names.UniquePath(folder, name);
                 File.Move(temp, target);
                 return new Received

@@ -230,6 +230,8 @@ def test_received_names_are_made_safe(tmp_path):
     assert safe_name("name. . ") == "name"
     assert safe_name("") == "file"
     assert len(safe_name("x" * 300 + ".jpg")) == 150
+    assert safe_name("photo\u202egpj.exe") == "photogpj.exe"
+    assert safe_name("\u200bnote\ufeff.\u2066txt") == "note.txt"
     (tmp_path / "a.txt").write_bytes(b"")
     (tmp_path / "a (1).txt").write_bytes(b"")
     assert unique_path(str(tmp_path), "a.txt") == str(tmp_path / "a (2).txt")

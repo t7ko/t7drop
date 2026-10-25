@@ -78,6 +78,16 @@ the push. Once pushed, assume it is public forever.**
   check on Android, no R8). Item 1: `deploy.sh` and `nginx-unhook.sh`, tested with
   stand-ins in WSL (`tests/test_deploy.py`, 16 tests); the user chose no installation in
   WSL, so the first real run is on the VPS.
+- 2026-10-25: `deploy.sh` upgraded the VPS (the M2 code to the item 1 commit), checked
+  locally and through nginx. Item 2: `docs/security.md` (threat model, findings S1-S7,
+  D1-D2, C1-C9) and its fixes: the server (refusals of `/pair` look like the site, check codes
+  count against pairing, 6 chunk transfers at once, revoked devices' items dropped, a
+  self-test of the chunk store), the sandbox (system-call filter, private `/proc`), the
+  Windows app (signed self-update with a release key made with the user's OK, the Mark of
+  the Web on received files at the user's choice, the pipe closed to the network), names
+  without invisible format characters on all clients, Android (share only other apps'
+  content, the pairing form names the server, no redirects, no device-to-device copy of
+  its data). `tests/test_sources.py` keeps invisible characters out of the repository.
 
 ## Working with the VPS
 
@@ -98,6 +108,7 @@ the push. Once pushed, assume it is public forever.**
 
 - `docs/design.md`: architecture, encryption, protocol, milestones.
 - `docs/deployment.md`: what the deployment adds to the VPS, the steps, the risks.
+- `docs/security.md`: the threat model, and the M5 review's findings and fixes.
 - `server/`: the relay. `main.py` runs it, `admin.py` is `t7drop-admin`; the package
   `t7drop_server/`: `protocol` (constants), `config`, `registry` (devices and codes in
   files), `blobs` (chunk files under the in-memory key), `hub` (the queue in memory),
@@ -137,9 +148,11 @@ the push. Once pushed, assume it is public forever.**
 - `windows/` (M4): the tray app `T7Drop.exe`; see "Windows app" below. `windows/CLAUDE.md`
   imports the t7helpers Windows notes (toolchain, trying tray apps).
 - `scripts/push.ps1` pushes to GitHub with the token (after `scan_private.py --history`);
-  `scripts/release.ps1` publishes release `v<versionName>` with the APK for Obtainium and
-  `T7Drop.exe` for the Windows app's updater. `versionName` in `android/app/build.gradle.kts`
-  is the one version of both apps.
+  `scripts/release.ps1` publishes release `v<versionName>` with the APK for Obtainium, and
+  `T7Drop.exe` with `T7Drop.exe.sig` for the Windows app's updater: it signs with the release
+  key that `windows.signKeyFile` in the root `local.properties` names. Every release from
+  0.3.0 on needs that key, or the Windows apps refuse it. `versionName` in
+  `android/app/build.gradle.kts` is the one version of both apps.
 
 ## Windows app (`windows/`)
 
@@ -158,7 +171,11 @@ the push. Once pushed, assume it is public forever.**
   (Project Nayuki's encoder, ported), `Sender` (queues what the user sends; folders as zip),
   `Shell` (links, the clipboard, the Send To shortcut), the windows `PairForm`, `QrForm`,
   `HistoryForm`, `SettingsForm` (built in code, sized in em; `Ui` has the helpers), `Icons`;
-  `Updater`, `SleepWatcher` and `Autostart` come from ping-tray.
+  `Updater`, `SleepWatcher` and `Autostart` come from ping-tray. `Updater` (M5) takes only a
+  release with `T7Drop.exe.sig`, the Ed25519 signature of the exe under the release key
+  (`ReleaseKeyHex` is its public half); `windows/tests/Signing.cs` makes the key once
+  (`Tests.exe keygen`) and signs (`Tests.exe sign <key file> <exe>`, which refuses any other
+  key). `Files.MarkFromInternet` (in `Json.cs`) gives received files the Mark of the Web.
 - `lib/libsodium.dll`: the official libsodium 1.0.22 MSVC x64 build (`lib/README.md`: source,
   signature, hashes). Embedded in the exe, written to `lib\<hash>\` in the data folder and
   loaded with LoadLibrary before any P/Invoke. It needs `VCRUNTIME140.dll`; without it the app
@@ -199,9 +216,13 @@ the push. Once pushed, assume it is public forever.**
   a test copy of `dist/T7Drop.exe` with `T7DROP_HOME`, the CLI as the phone; `T7Drop.exe
   --exit` ends a copy. WinForms text boxes show as panes in UI Automation, whose automation
   id is the window handle: WM_SETTEXT and BM_CLICK work on them. Self-update:
-  `windows/scripts/fake-release-server.js` serves a `latest.json` and a higher-version exe;
-  start a copy with `T7DROP_RELEASES_URL=http://127.0.0.1:<port>/latest`; the check runs a
-  minute after start.
+  `windows/scripts/fake-release-server.js` serves a `latest.json` and a higher-version exe
+  with its `.sig`; start a copy with `T7DROP_RELEASES_URL=http://127.0.0.1:<port>/latest`;
+  the check runs a minute after start. The higher version: compile `src/*.cs` with csc as
+  `build.ps1` does, with a `Version.cs` of its own; sign it with the real release key
+  (`Tests.exe sign`; there is no test key in the app). Tried that way on 2026-10-25: a signed
+  0.2.1 installed itself, a damaged signature was refused at download, and a release without
+  `.sig` was not offered.
 
 ## Code rules
 

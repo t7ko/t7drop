@@ -20,7 +20,8 @@ class Config:
     undelivered_days: float = 7
     delivered_days: float = 7
     max_wait_seconds: int = 55
-    max_failed_pairings: int = 10  # an hour, all devices together
+    max_failed_pairings: int = 10  # an hour, wrong pairing and check codes together
+    max_transfers: int = 6  # chunk uploads and downloads at the same time
 
 
 _SUFFIXES = {"K": 1024, "M": MIB, "G": 1024 * MIB}

@@ -16,7 +16,8 @@ class Shared(val uris: List<Uri>, val text: String?) {
     val isEmpty: Boolean get() = uris.isEmpty() && text.isNullOrBlank()
 
     companion object {
-        fun fromIntent(intent: Intent): Shared {
+        /** What another app shared; only the content it may share ([SharedUris.acceptable]). */
+        fun fromIntent(intent: Intent, ownPackage: String): Shared {
             val uris = mutableListOf<Uri>()
             when (intent.action) {
                 Intent.ACTION_SEND -> IntentCompat.getParcelableExtra(intent, Intent.EXTRA_STREAM, Uri::class.java)?.let { uris.add(it) }
@@ -26,12 +27,24 @@ class Shared(val uris: List<Uri>, val text: String?) {
             if (uris.isEmpty()) {
                 intent.clipData?.let { clip -> (0 until clip.itemCount).mapNotNullTo(uris) { clip.getItemAt(it).uri } }
             }
+            uris.retainAll { SharedUris.acceptable(it.scheme, it.authority, ownPackage) }
             val text = intent.getCharSequenceExtra(Intent.EXTRA_TEXT)?.toString()
             val subject = intent.getStringExtra(Intent.EXTRA_SUBJECT)
             val fullText = if (text != null && !subject.isNullOrBlank() && !text.contains(subject)) "$subject\n$text" else text
             return Shared(uris, fullText)
         }
     }
+}
+
+/**
+ * The share screen is open to every app, and reads what it is given with t7drop's own rights:
+ * a file:// path, or a content URI of t7drop itself, would let another app send t7drop's
+ * private files (docs/security.md). Only another app's content URIs, which that app granted.
+ */
+object SharedUris {
+    fun acceptable(scheme: String?, authority: String?, ownPackage: String): Boolean =
+        scheme.equals("content", ignoreCase = true) && !authority.isNullOrEmpty() &&
+            authority != ownPackage && !authority.startsWith("$ownPackage.")
 }
 
 /** Encrypts and queues items for the other device, then starts a transfer. */

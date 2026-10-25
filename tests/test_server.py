@@ -5,7 +5,12 @@ import threading
 import time
 import uuid
 
+import pytest
+
+import helpers
 from helpers import API, CHUNK, Http, b64, item_body, pair, sha256
+from t7drop_server import api
+from t7drop_server.blobs import ChunkStore
 from t7drop_server.registry import Registry
 
 
@@ -274,3 +279,86 @@ def test_the_sender_can_delete_an_item(server):
     assert a.delete("/items/" + item).status == 200
     assert b.get("/sync").json()["inbox"] == []
     assert blob_files(server) == []
+
+
+# M5: the security review (docs/security.md)
+
+def test_refused_pairing_requests_look_like_the_site(server):
+    h = Http(server.port)
+    for body in (b"not json", b"[1, 2]", b"[" * 10000, b"x" * (17 * 1024)):
+        r = h.post("/pair", body=body, headers={"Content-Type": "application/json"})
+        assert r.status == 404 and r.instance is None, body[:20]
+        assert b"<center>nginx</center>" in r.body
+    r = h.post("/pair", body=b"5\r\n{\"a\":\r\n0\r\n\r\n", headers={"Transfer-Encoding": "chunked"})
+    assert r.status == 404 and r.instance is None
+
+
+def test_wrong_check_codes_count_against_pairing(server):
+    h = Http(server.port)
+    for _ in range(10):
+        assert h.get("/ping", token=None, headers={"Authorization": "Check WRONGWRONG"}).status == 404
+    code = server.registry.create_invite("check", ttl=120)
+    assert h.get("/ping", token=None, headers={"Authorization": "Check " + code}).status == 404
+    pairing = server.registry.create_invite("pair", name="laptop")
+    assert h.post("/pair", json_body={"code": pairing}).status == 404
+
+
+def test_wrong_codes_cost_no_disk_writes(server):
+    server.registry.create_invite("pair", name="laptop")
+    path = server.registry.invites_path
+    before = os.stat(path).st_mtime_ns, open(path, "rb").read()
+    time.sleep(0.05)
+    h = Http(server.port)
+    h.post("/pair", json_body={"code": "WRONGWRONG"})
+    h.get("/ping", token=None, headers={"Authorization": "Check WRONGWRONG"})
+    assert (os.stat(path).st_mtime_ns, open(path, "rb").read()) == before
+
+
+def test_chunk_transfers_wait_for_a_free_slot(start_server, monkeypatch):
+    monkeypatch.setattr(api, "TRANSFER_WAIT", 0.2)
+    server = start_server(max_transfers=1)
+    a, _ = pair(server, "a")
+    _, b_id = pair(server, "b")
+    item = new_id()
+    a.put("/items/" + item, json_body=item_body(b_id, b"x" * 100))
+    assert server.app.transfers.acquire(timeout=1)  # another transfer in flight
+    try:
+        r = a.put("/items/%s/chunks/0" % item, body=b"x" * 100)
+        assert r.status == 503 and r.json()["error"] == "busy" and r.instance
+        assert r.headers.get("connection") == "close"
+        assert a.get("/ping").status == 200, "other requests go on"
+    finally:
+        server.app.transfers.release()
+    assert a.put("/items/%s/chunks/0" % item, body=b"x" * 100).status == 200
+
+
+def test_the_items_of_a_revoked_device_go(server):
+    a, a_id = pair(server, "a")
+    b, b_id = pair(server, "b")
+    _, c_id = pair(server, "c")
+    to_b, from_b, to_c = new_id(), new_id(), new_id()
+    a.put("/items/" + to_b, json_body=item_body(b_id, b"1" * 10))
+    a.put("/items/%s/chunks/0" % to_b, body=b"1" * 10)
+    b.put("/items/" + from_b, json_body=item_body(a_id, b"2", inline=True))
+    a.put("/items/" + to_c, json_body=item_body(c_id, b"3", inline=True))
+    Registry(server.config.data_dir).revoke("b")
+    server.tidy()
+    assert [e["id"] for e in a.get("/sync").json()["outbox"]] == [to_c]
+    assert a.get("/sync").json()["inbox"] == []
+    assert server.hub.reserved_bytes() == 1
+    assert len(blob_files(server)) == 1
+
+
+def test_json_nested_too_deep_is_refused(server):
+    a, _ = pair(server, "a")
+    r = a.put("/items/" + new_id(), body=b"[" * 100000, headers={"Content-Type": "application/json"})
+    assert r.status == 400 and r.json()["error"] == "bad_json"
+
+
+def test_the_server_does_not_start_when_its_chunk_store_fails(tmp_path, clock, monkeypatch):
+    server = helpers.start(tmp_path, clock)
+    assert blob_files(server) == [], "the self-test cleans up"
+    server.shutdown()
+    monkeypatch.setattr(ChunkStore, "get", lambda self, item_id, n: b"other bytes")
+    with pytest.raises(RuntimeError):
+        helpers.start(tmp_path, clock)

@@ -27,6 +27,13 @@ class PairingTest {
     }
 
     @Test
+    fun theServerHostIsShownBeforePairing() {
+        assertEquals("example.org", Pairing.serverHost(Pairing.make("https://example.org/abc", "ABCDE23456", key)))
+        assertEquals(null, Pairing.serverHost("t7drop:pair?v=1&u=https%3A%2F%2Fx&c=y"))
+        assertEquals(null, Pairing.serverHost(""))
+    }
+
+    @Test
     fun otherTextIsRefused() {
         for (bad in listOf(
             "https://example.org",

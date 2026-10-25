@@ -19,6 +19,7 @@ namespace T7Drop
         public Version Version;
         public string PageUrl;
         public string DownloadUrl;
+        public string SignatureUrl;  // T7Drop.exe.sig; null when the release has none
         public long Size;
         public string Sha256;  // lower-case hex, or null when GitHub gave no digest
     }
@@ -29,11 +30,20 @@ namespace T7Drop
     /// the running one becomes T7Drop.exe.old, the new one takes its name and is started with
     /// --updated-from, and this process exits. The new process waits for that, then deletes the
     /// old exe. The path stays the same, so Start with Windows keeps working.
+    ///
+    /// GitHub alone is not trusted (docs/security.md): the release must carry T7Drop.exe.sig, the
+    /// Ed25519 signature of the exe under the release key, whose secret half never leaves the
+    /// release machine (scripts/release.ps1 signs with it). A release without it is not offered,
+    /// and a download that the key did not sign is refused.
     /// </summary>
     public static class Updater
     {
         public const string Repository = "t7ko/t7drop";
         public const string AssetName = "T7Drop.exe";
+        public const string SignatureName = AssetName + ".sig";
+        // The public half of the release key (Tests.exe keygen made it; AGENTS.local.md says where
+        // the secret half is kept).
+        public const string ReleaseKeyHex = "3b3737b95698e3cb222357769e159cedf005a667f66e9abf294e5aebfa641940";
         const string ProgramName = "T7Drop";
         const string UpdatedFromArgument = "--updated-from";
 
@@ -78,7 +88,14 @@ namespace T7Drop
                 throw;
             }
             Release release = Parse(json);
-            return release != null && release.Version > CurrentVersion ? release : null;
+            if (release == null || release.Version <= CurrentVersion)
+                return null;
+            if (release.SignatureUrl == null)
+            {
+                Log.Write("release " + Text(release.Version) + " has no " + SignatureName + ": not offered");
+                return null;
+            }
+            return release;
         }
 
         /// <summary>Reads GitHub's release JSON; null if the tag is not a version or the exe is not attached.</summary>
@@ -88,16 +105,17 @@ namespace T7Drop
             using (var stream = new MemoryStream(Encoding.UTF8.GetBytes(json)))
                 data = (GitHubRelease)new DataContractJsonSerializer(typeof(GitHubRelease)).ReadObject(stream);
             Version version = ParseVersion(data.TagName);
-            GitHubAsset asset = data.Assets == null ? null : data.Assets.FirstOrDefault(
-                a => string.Equals(a.Name, AssetName, StringComparison.OrdinalIgnoreCase));
+            GitHubAsset asset = FindAsset(data, AssetName);
             if (version == null || asset == null || string.IsNullOrEmpty(asset.DownloadUrl))
                 return null;
+            GitHubAsset signature = FindAsset(data, SignatureName);
             const string sha256Prefix = "sha256:";
             return new Release
             {
                 Version = version,
                 PageUrl = data.HtmlUrl,
                 DownloadUrl = asset.DownloadUrl,
+                SignatureUrl = signature == null || string.IsNullOrEmpty(signature.DownloadUrl) ? null : signature.DownloadUrl,
                 Size = asset.Size,
                 Sha256 = asset.Digest != null && asset.Digest.StartsWith(sha256Prefix, StringComparison.OrdinalIgnoreCase)
                     ? asset.Digest.Substring(sha256Prefix.Length).ToLowerInvariant() : null,
@@ -114,16 +132,30 @@ namespace T7Drop
             return Version.TryParse(text, out version) ? Normalize(version) : null;
         }
 
-        /// <summary>Downloads the release next to the exe, checks it, and returns its path.</summary>
+        static GitHubAsset FindAsset(GitHubRelease data, string name)
+        {
+            return data.Assets == null ? null
+                : data.Assets.FirstOrDefault(a => string.Equals(a.Name, name, StringComparison.OrdinalIgnoreCase));
+        }
+
+        /// <summary>Downloads the release and its signature next to the exe, checks them, and returns the exe's path.</summary>
         public static async Task<string> DownloadAsync(Release release, string exePath)
         {
+            if (release.SignatureUrl == null)
+                throw new InvalidDataException("The release has no " + SignatureName + ".");
+            byte[] signature;
+            using (WebClient client = NewClient())
+            {
+                byte[] text = await client.DownloadDataTaskAsync(new Uri(release.SignatureUrl)).ConfigureAwait(false);
+                signature = ParseSignature(Encoding.ASCII.GetString(text));
+            }
             string path = exePath + ".new";
             File.Delete(path);
             using (WebClient client = NewClient())
                 await client.DownloadFileTaskAsync(new Uri(release.DownloadUrl), path).ConfigureAwait(false);
             try
             {
-                Verify(path, release);
+                Verify(path, release, signature);
             }
             catch
             {
@@ -133,14 +165,30 @@ namespace T7Drop
             return path;
         }
 
-        /// <summary>Throws unless the file is T7Drop with the size, SHA-256 and version of the release.</summary>
-        public static void Verify(string path, Release release)
+        /// <summary>The 64 bytes of a .sig file (hex, as Tests.exe sign writes it); null if it is no signature.</summary>
+        public static byte[] ParseSignature(string text)
+        {
+            string hex = (text ?? "").Trim();
+            if (hex.Length != 2 * Sodium.SignatureBytes || !hex.All(Uri.IsHexDigit))
+                return null;
+            return Hex.Parse(hex);
+        }
+
+        /// <summary>Throws unless the file is T7Drop with the release's size, SHA-256 and version, signed with the release key.</summary>
+        public static void Verify(string path, Release release, byte[] signature)
+        {
+            Verify(path, release, signature, Hex.Parse(ReleaseKeyHex));
+        }
+
+        public static void Verify(string path, Release release, byte[] signature, byte[] publicKey)
         {
             long length = new FileInfo(path).Length;
             if (release.Size > 0 && length != release.Size)
                 throw new InvalidDataException("The download has " + length + " bytes, not " + release.Size + ".");
             if (release.Sha256 != null && Sha256(path) != release.Sha256)
                 throw new InvalidDataException("The download's SHA-256 differs from the release's.");
+            if (!Sodium.VerifyDetached(signature, File.ReadAllBytes(path), publicKey))
+                throw new InvalidDataException("The download is not signed with t7drop's release key.");
             AssemblyName name;
             try
             {

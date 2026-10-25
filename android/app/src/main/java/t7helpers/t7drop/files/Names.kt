@@ -9,6 +9,8 @@ object Names {
 
     fun safe(name: String?): String {
         var result = (name ?: "").replace('\\', '/').substringAfterLast('/')
+        // Invisible format characters, such as U+202E that shows "photo<U+202E>gpj.exe" as "photoexe.jpg".
+        result = result.filter { Character.getType(it) != Character.FORMAT.toInt() }
         result = result.map { if (it in forbidden || it.code < 32) '_' else it }.joinToString("")
         result = result.trim().trimEnd('.', ' ')
         if (result.isEmpty()) result = "file"

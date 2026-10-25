@@ -203,5 +203,50 @@ namespace T7Drop
             using (FileStream stream = File.OpenRead(path))
                 return Hex.Of(sha.ComputeHash(stream));
         }
+
+        public const string ZoneStream = ":Zone.Identifier";
+        public const string InternetZone = "[ZoneTransfer]\r\nZoneId=3\r\n";
+
+        /// <summary>
+        /// Marks a file as downloaded from the internet (the Mark of the Web), as browsers do, so
+        /// that SmartScreen and Office's Protected View treat it so (docs/security.md). Returns
+        /// false where the folder cannot carry it (a FAT or exFAT drive has no alternate streams).
+        /// .NET Framework refuses a colon in a path, hence CreateFile.
+        /// </summary>
+        public static bool MarkFromInternet(string path)
+        {
+            using (Microsoft.Win32.SafeHandles.SafeFileHandle handle = CreateFile(path + ZoneStream, GenericWrite,
+                0, IntPtr.Zero, CreateAlways, 0, IntPtr.Zero))
+            {
+                if (handle.IsInvalid)
+                    return false;
+                using (var stream = new FileStream(handle, FileAccess.Write))
+                {
+                    byte[] text = Encoding.ASCII.GetBytes(InternetZone);
+                    stream.Write(text, 0, text.Length);
+                }
+                return true;
+            }
+        }
+
+        /// <summary>The Zone.Identifier stream of a file, or null if it has none.</summary>
+        public static string ReadZone(string path)
+        {
+            using (Microsoft.Win32.SafeHandles.SafeFileHandle handle = CreateFile(path + ZoneStream, GenericRead,
+                FileShareRead, IntPtr.Zero, OpenExisting, 0, IntPtr.Zero))
+            {
+                if (handle.IsInvalid)
+                    return null;
+                using (var stream = new FileStream(handle, FileAccess.Read))
+                using (var reader = new StreamReader(stream, Encoding.ASCII))
+                    return reader.ReadToEnd();
+            }
+        }
+
+        const uint GenericRead = 0x80000000, GenericWrite = 0x40000000, FileShareRead = 1, CreateAlways = 2, OpenExisting = 3;
+
+        [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+        static extern Microsoft.Win32.SafeHandles.SafeFileHandle CreateFile(string name, uint access, uint share,
+            IntPtr security, uint creation, uint flags, IntPtr template);
     }
 }

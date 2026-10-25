@@ -75,6 +75,9 @@ namespace T7Drop
             var security = new PipeSecurity();
             security.AddAccessRule(new PipeAccessRule(WindowsIdentity.GetCurrent().User,
                 PipeAccessRights.ReadWrite | PipeAccessRights.CreateNewInstance, AccessControlType.Allow));
+            // Not even this user from another computer: a pipe is open to the network otherwise.
+            security.AddAccessRule(new PipeAccessRule(new SecurityIdentifier(WellKnownSidType.NetworkSid, null),
+                PipeAccessRights.FullControl, AccessControlType.Deny));
             while (!stopping)
             {
                 try

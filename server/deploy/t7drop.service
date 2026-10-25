@@ -42,6 +42,14 @@ RestrictRealtime=yes
 RestrictSUIDSGID=yes
 LockPersonality=yes
 SystemCallArchitectures=native
+# M5: the system calls of an ordinary service only (a blocked one fails with EPERM), and
+# of /proc only its own process. Not MemoryDenyWriteExecute: ctypes (prctl, in main.py)
+# may need libffi closures.
+SystemCallFilter=@system-service
+SystemCallErrorNumber=EPERM
+ProtectProc=invisible
+ProcSubset=pid
+RemoveIPC=yes
 
 [Install]
 WantedBy=multi-user.target
