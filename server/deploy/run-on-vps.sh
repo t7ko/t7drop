@@ -9,7 +9,8 @@
 # local/scripts/ for scripts that name the VPS's other services; arguments must not
 # contain spaces. --upload-code first copies the committed server/ folder (git archive of HEAD;
 # refused while server/ has uncommitted changes) to /root/t7drop-server.tar.gz and puts
-# that path and the commit id before the arguments; install.sh needs it.
+# that path and the commit id before the arguments; install.sh, deploy.sh (except with
+# --rollback) and nginx-hook.sh need it.
 #
 # The SSH key's passphrase is asked once, in a Windows dialog, through with-temp-agent.sh
 # from the t7helpers shared scripts (T7_SSH_KEY picks another key). Without those scripts,

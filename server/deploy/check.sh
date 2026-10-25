@@ -15,6 +15,9 @@ say() { printf '\n== %s\n' "$*"; }
 say "Service"
 systemctl status t7drop --no-pager -n 0
 echo "code: $(cat /opt/t7drop/COMMIT 2>/dev/null || echo 'not installed')"
+for kept in old failed; do
+    [ ! -d "/opt/t7drop.$kept" ] || echo "/opt/t7drop.$kept: $(cat "/opt/t7drop.$kept/COMMIT" 2>/dev/null)"
+done
 for kind in Current Peak; do
     memory=$(systemctl show -p "Memory$kind" --value t7drop)
     case "$memory" in

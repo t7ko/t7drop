@@ -1,15 +1,16 @@
 #!/bin/bash
-# t7drop, deployment step 1 (docs/deployment.md): installs or upgrades the service.
+# t7drop, deployment step 1 (docs/deployment.md): installs the service, once. Upgrades go
+# through deploy.sh, which checks the new version and rolls back by itself; this script
+# refuses to run once t7drop.service is installed.
 #
 # Run as root on the VPS through `run-on-vps.sh --upload-code <host> install.sh`, which
 # first copies the committed server code to /root/t7drop-server.tar.gz and passes that
 # path and the commit id.
 #
-# What it changes: creates the user t7drop (once); puts the code in /opt/t7drop and keeps
-# the previous version in /opt/t7drop.old; writes /etc/t7drop/server.conf only if it is
-# missing; writes /etc/systemd/system/t7drop.service and /usr/local/sbin/t7drop-admin;
-# enables and (re)starts t7drop.service. It touches nothing else: not nginx, not the other
-# services, not the firewall. Undo: uninstall.sh.
+# What it changes: creates the user t7drop (once); puts the code in /opt/t7drop; writes
+# /etc/t7drop/server.conf only if it is missing; writes /etc/systemd/system/t7drop.service
+# and /usr/local/sbin/t7drop-admin; enables and starts t7drop.service. It touches nothing
+# else: not nginx, not the other services, not the firewall. Undo: uninstall.sh.
 
 set -u
 export LC_ALL=C
@@ -25,6 +26,8 @@ fail() { printf '\nFAILED: %s\n' "$*"; exit 1; }
 say "Checks"
 [ "$(id -u)" = 0 ] || fail "run as root"
 [ -f "$TARBALL" ] || fail "no $TARBALL"
+[ ! -f /etc/systemd/system/t7drop.service ] \
+    || fail "t7drop is installed already; upgrade it with deploy.sh (run-on-vps.sh --upload-code <host> deploy.sh)"
 python3 -c 'import sys, cryptography; assert sys.version_info >= (3, 12); print("python", sys.version.split()[0], "cryptography", cryptography.__version__)' \
     || fail "python3 3.12 or newer with cryptography is needed"
 command -v runuser >/dev/null || fail "runuser is missing"

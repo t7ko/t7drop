@@ -50,7 +50,8 @@ if [ -f /etc/systemd/system/t7drop.service ]; then
     echo "stopped and removed t7drop.service"
 fi
 rm -f /usr/local/sbin/t7drop-admin
-rm -rf /opt/t7drop /opt/t7drop.old /opt/t7drop.new /etc/t7drop /var/lib/t7drop /root/t7drop-server.tar.gz
+rm -rf /opt/t7drop /opt/t7drop.old /opt/t7drop.new /opt/t7drop.older /opt/t7drop.swap /opt/t7drop.failed \
+    /etc/t7drop /var/lib/t7drop /root/t7drop-server.tar.gz
 echo "removed /opt/t7drop, /etc/t7drop, /var/lib/t7drop, /usr/local/sbin/t7drop-admin"
 if getent passwd t7drop >/dev/null; then
     userdel t7drop && echo "removed the user t7drop"

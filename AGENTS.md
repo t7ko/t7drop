@@ -71,6 +71,13 @@ the push. Once pushed, assume it is public forever.**
 - 2026-10-21/22: v0.2.0 published (`t7drop-0.2.0.apk` and `T7Drop.exe`). The user's 0.1.1
   updated itself from the GitHub release through Check for updates, and the phone took the
   APK through Obtainium. M4 done.
+- 2026-10-22: M5 agreed with the user, item by item, each with its own tests and commit:
+  1. deploy and rollback in one step; 2. a security review (threat model and findings in
+  `docs/security.md`, fixes, tests; the Windows exe gets an Ed25519 signature that the
+  updater checks); 3. robustness left over from M1 to M4. No optional extras (no periodic
+  check on Android, no R8). Item 1: `deploy.sh` and `nginx-unhook.sh`, tested with
+  stand-ins in WSL (`tests/test_deploy.py`, 16 tests); the user chose no installation in
+  WSL, so the first real run is on the VPS.
 
 ## Working with the VPS
 
@@ -96,11 +103,14 @@ the push. Once pushed, assume it is public forever.**
   files), `blobs` (chunk files under the in-memory key), `hub` (the queue in memory),
   `api` (HTTP), `app` (wiring). It needs only the standard library and `cryptography`.
 - `server/deploy/`: scripts the user runs against the VPS through `run-on-vps.sh`:
-  `install.sh` (step 1) and `nginx-hook.sh` (step 2), both with `--upload-code`,
-  `check.sh`, `admin.sh`, `restart.sh`, `uninstall.sh`; and what they install:
-  `t7drop.service`, `t7drop-admin`, `server.conf`, `nginx-location.conf`.
-  `docs/deployment.md` lists them. Scripts that name the VPS's other services (the M0
-  inspections) are in the git-ignored `local/scripts/`; `run-on-vps.sh` finds them there.- `cli/`: the command-line client, `t7drop.py`; package `t7drop_cli/`: `crypto`
+  `install.sh` (step 1, once) and `nginx-hook.sh` (step 2), both with `--upload-code`;
+  `deploy.sh` (upgrades with a check and an automatic rollback, with `--upload-code`;
+  `--rollback` goes back by hand), `nginx-unhook.sh` (undoes step 2 only), `check.sh`,
+  `admin.sh`, `restart.sh`, `uninstall.sh`; and what they install: `t7drop.service`,
+  `t7drop-admin`, `server.conf`, `nginx-location.conf`. `docs/deployment.md` lists them.
+  Scripts that name the VPS's other services (the M0 inspections) are in the git-ignored
+  `local/scripts/`; `run-on-vps.sh` finds them there.
+- `cli/`: the command-line client, `t7drop.py`; package `t7drop_cli/`: `crypto`
   (secretstream), `pairing` (the invitation URI), `api`, `state` (the profile folder),
   `agent` (sending, receiving, retries), `files` (safe names), `main` (commands).
 - `tests/`: pytest; `helpers.py` starts servers in-process. `make_vectors.py` wrote
@@ -197,10 +207,15 @@ the push. Once pushed, assume it is public forever.**
 
 - Server code must run on Ubuntu 24.04's Python 3.12 with `cryptography` 41.0.7, the
   versions on the VPS: no newer syntax or APIs. `requirements-dev.txt` pins that version.
+- A rollback (`deploy.sh`) brings back older code over the same data and `server.conf`: a
+  new server version must keep `devices.json` and `invites.json` readable by the previous
+  one, and give any new setting a default.
 - A response without `X-T7drop-Instance` is not from t7drop. Clients treat it as a
   temporary failure, never as "unpaired" or "item gone".
 - Tests: `python -m pytest` in a venv with `requirements-dev.txt` (where it is on this
   machine: `AGENTS.local.md`); `tests/test_windows.py` needs `windows/scripts/build.ps1` first.
+  `tests/test_deploy.py` runs only on Linux (WSL, as an ordinary user, in `/tmp`): it runs
+  the deploy scripts with stand-ins for systemctl, runuser and nginx.
 
 ## Toolchains
 

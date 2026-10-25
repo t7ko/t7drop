@@ -27,14 +27,14 @@ and the other services' details are not in this repository.
 | Path | What |
 | --- | --- |
 | system user `t7drop` | Runs the service; no shell, no login |
-| `/opt/t7drop/` | The server code; owned by root, read-only for the service |
+| `/opt/t7drop/` | The server code; owned by root, read-only for the service. `deploy.sh` keeps the previous version in `/opt/t7drop.old`, and one that failed its check in `/opt/t7drop.failed` |
 | `/etc/t7drop/server.conf` | Port, limits |
 | `/var/lib/t7drop/` | `devices.json`, `invites.json`, `status.json` and the chunk files; mode 0700, owned by `t7drop` (`StateDirectory`) |
 | `/etc/systemd/system/t7drop.service` | The service |
 | `/usr/local/sbin/t7drop-admin` | The admin command, for root: runs `admin.py` as `t7drop` with `runuser` |
 | `/etc/nginx/t7drop/t7drop.conf` | t7drop's `location` block |
 | two lines at the end of `/etc/nginx/snippets/includes.conf` | A marker comment and `include /etc/nginx/t7drop/*.conf;` |
-| `/root/t7drop-backup/` | Copies the deploy steps make before changing anything |
+| `/root/t7drop-backup/` | Copies the nginx steps make before changing anything |
 
 Nothing is installed with apt or pip. The other services, the tool that writes the web
 server block, the stream configuration, the certificates, the firewall and SSH stay as
@@ -117,8 +117,11 @@ SSH agent session.
 
 | Script | Step |
 | --- | --- |
-| `install.sh` | 1: install or upgrade the service; with `--upload-code` |
+| `install.sh` | 1: install the service, once; with `--upload-code` |
 | `nginx-hook.sh <hostname> <prefix> <port> [<second hostname>]` | 2: the nginx location and include line; with `--upload-code` (the template `nginx-location.conf` comes with the code) |
+| `deploy.sh [<hostname> <prefix>]` | Upgrades the code, checks it, rolls back by itself if the check fails; with `--upload-code` (see "Upgrades and rollback") |
+| `deploy.sh --rollback [<hostname> <prefix>]` | Back to the previous version, with the same check; without `--upload-code` |
+| `nginx-unhook.sh [<hostname> <prefix> [<second hostname>]]` | Undoes step 2 only: t7drop leaves nginx, the service keeps running |
 | `admin.sh <arguments>` | Runs `t7drop-admin`, such as `admin.sh invite laptop` |
 | `restart.sh` | Restarts `t7drop.service` only; its queue is lost, clients upload again |
 | `check.sh [<hostname> <prefix>]` | Any time: service, devices, queue, nginx lines; through nginx if given the hostname and prefix |
@@ -128,8 +131,8 @@ SSH agent session.
 1. **Install the service** (`install.sh`). Creates the user, the folders, the config, the
    unit; starts the service. Check: the service is active, answers on 127.0.0.1:8765 (404
    without a token, 200 with a check code), is not dumpable, has a core limit of 1, uses
-   under 100 MB. Nothing shared is touched. Running it again upgrades the code and keeps
-   the previous version in `/opt/t7drop.old`. Undo: `uninstall.sh`.
+   under 100 MB. Nothing shared is touched. Once the service is installed, it refuses to
+   run again: upgrades go through `deploy.sh`. Undo: `uninstall.sh`.
 2. **Hook into nginx.**
    - Copies `includes.conf` to `/root/t7drop-backup/`.
    - Before the change, records the HTTP status of the site root and of every path in
@@ -143,8 +146,9 @@ SSH agent session.
    - Checks t7drop through the public URL with a one-time check token from
      `t7drop-admin`.
 
-   Undo: remove the two lines (or restore the backup), delete `/etc/nginx/t7drop/`,
-   `nginx -t`, reload. The script (`nginx-hook.sh`) does that by itself when `nginx -t`
+   Undo: `nginx-unhook.sh` (see "Upgrades and rollback"); by hand: remove the two lines
+   (or restore the backup), delete `/etc/nginx/t7drop/`, `nginx -t`, reload. The script
+   (`nginx-hook.sh`) undoes its change by itself when `nginx -t`
    fails, a status changes, or t7drop does not answer through nginx. It records the
    statuses through port 443 both with the web hostname and with a hostname of the other
    service,
@@ -153,6 +157,46 @@ SSH agent session.
 
 A `check` script verifies at any time that the include line is there, the service runs
 and the public URL answers. An `uninstall` script undoes steps 2 and 1.
+
+## Upgrades and rollback
+
+- **Upgrade:** `run-on-vps.sh --upload-code root@<VPS> deploy.sh <hostname> <prefix>`.
+  It checks the running version first; if t7drop answers locally but not through nginx, it
+  stops before any change, since then nginx needs fixing, not t7drop. It unpacks the new
+  code into `/opt/t7drop.new` and makes sure it compiles, imports and reads
+  `/etc/t7drop/server.conf` with the VPS's Python as the user `t7drop`; a failure here
+  changes nothing. Then the running code becomes `/opt/t7drop.old`, the new code
+  `/opt/t7drop`, the unit and `t7drop-admin` are installed from it, and the service
+  restarts.
+- **The check**, before and after: the service runs; it answers 404 without a token, and 200
+  with `X-T7drop-Instance` to a one-time check code, locally and through nginx; `t7drop-admin`
+  reads the devices; the process is not dumpable and has a core limit of 1; after the
+  restart it keeps the same process for 5 seconds.
+- **Automatic rollback:** if the new version fails the check, the previous code, unit and
+  admin command come back (the failed code stays in `/opt/t7drop.failed`, for a look), the
+  service restarts and is checked again. The script says which version runs at the end.
+- **Rollback by hand**, for a problem the check cannot see (the apps fail, say):
+  `run-on-vps.sh root@<VPS> deploy.sh --rollback <hostname> <prefix>` swaps `/opt/t7drop` and
+  `/opt/t7drop.old`, unit and admin command included, with the same check; it swaps back if
+  the check fails. A second `--rollback` goes forward again.
+- **nginx:** `run-on-vps.sh root@<VPS> nginx-unhook.sh <hostname> <prefix> <second hostname>`
+  copies `includes.conf` and `/etc/nginx/t7drop/` to `/root/t7drop-backup/`, removes the two
+  lines and the folder, runs `nginx -t` and reloads. Like `nginx-hook.sh`, it records the
+  statuses of the site's paths before and after, and puts everything back if `nginx -t`
+  fails or a status changes. The service keeps running on loopback, unreachable from
+  outside. To hook it in again: `nginx-hook.sh`, or copy the two backups back, `nginx -t`,
+  `systemctl reload nginx`.
+- Every restart empties the queue: senders upload again (see `docs/design.md`,
+  "Reliability"). A rollback does not touch `/etc/t7drop/server.conf` or the data in
+  `/var/lib/t7drop`, so **a new server version must keep `devices.json` and `invites.json`
+  readable by the previous one**, and accept settings the previous one did not know only
+  with defaults.
+- `deploy.sh` reads the whole script before it starts and ignores a dropped SSH connection,
+  so an upgrade or a rollback never stops half-way. `tests/test_deploy.py` runs it and
+  `nginx-unhook.sh` in a scratch folder with stand-ins for systemctl, runuser and nginx
+  (Linux only: WSL): a good upgrade, code that does not compile or import, versions that
+  die after 2 seconds, have a broken admin command, are dumpable or lack the core limit, a
+  rollback there and back, and nginx not passing t7drop on.
 
 ## Risks
 
